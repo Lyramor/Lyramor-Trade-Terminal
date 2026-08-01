@@ -1,0 +1,201 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    outputs:
+      # Whether this run actually cut a new release (version was bumped). The
+      # desktop build matrix gates on this — a full per-platform Electron build
+      # is expensive (mac runners bill 10×), so it must NOT run on every master
+      # push, only when a new tag/release was created.
+      created: ${{ steps.check.outputs.exists == 'false' }}
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for git-cliff
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+          # Determine if pre-release (contains - like beta.1, rc.1)
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if tag already exists
+        id: check
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install git-cliff
+        if: steps.check.outputs.exists == 'false'
+        uses: kenji-miyake/setup-git-cliff@v2
+
+      - name: Generate release notes
+        if: steps.check.outputs.exists == 'false'
+        id: notes
+        run: |
+          # Generate notes for this version only (since last tag).
+          # --tag labels the about-to-be-created version: git-cliff runs
+          # BEFORE the tag exists (it's created in the next step), so without
+          # this the section header falls back to "[Unreleased]" instead of
+          # the version. See cliff.toml's `{% if version %}` template.
+          TAG="${{ steps.version.outputs.tag }}"
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            git-cliff --tag "$TAG" --output notes.md
+          else
+            git-cliff "$LAST_TAG"..HEAD --tag "$TAG" --output notes.md
+          fi
+
+      - name: Create tag and GitHub Release
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body_path: notes.md
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
+          generate_release_notes: false
+
+  publish-opentypebb:
+    runs-on: ubuntu-latest
+    needs: release
+    if: needs.release.result == 'success'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+
+      - name: Check published versions
+        id: check
+        working-directory: packages/opentypebb
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          if npm view "@traderalice/opentypebb@$VERSION" version --registry=https://npm.pkg.github.com 2>/dev/null; then
+            echo "ghpkg=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ghpkg=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if npm view "@traderalice/opentypebb@$VERSION" version --registry=https://registry.npmjs.org 2>/dev/null; then
+            echo "npmjs=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "npmjs=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        if: steps.check.outputs.ghpkg == 'false' || steps.check.outputs.npmjs == 'false'
+        working-directory: packages/opentypebb
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Publish to GitHub Packages
+        if: steps.check.outputs.ghpkg == 'false'
+        working-directory: packages/opentypebb
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npmjs
+        if: steps.check.outputs.npmjs == 'false'
+        working-directory: packages/opentypebb
+        run: |
+          echo "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" > "$NPM_CONFIG_USERCONFIG"
+          npm publish --registry=https://registry.npmjs.org
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Per-platform desktop installers, attached to the release the `release`
+  # job already created (Option A — electron-builder only *builds*, softprops
+  # appends the artifact; release.yml stays the single owner of the release
+  # object + tag). Each runner builds only its own platform/arch, so each
+  # artifact carries just its matching native binary (longbridge, node-pty) —
+  # pnpm installs only the os/cpu-matching prebuilt. Unsigned for now: no
+  # Developer ID / Windows cert, so electron-builder emits unsigned packages
+  # (Gatekeeper right-click-open / SmartScreen on first run).
+  build-desktop:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-13 (Intel/x64) dropped: GitHub's x64 mac runners queue for
+        # tens of minutes and routinely never allocate, hanging the whole
+        # release run — and Intel Macs are a shrinking base Apple stopped
+        # selling in 2023 (arm64 covers every Mac since). Re-add if real
+        # demand appears, ideally cross-built off the arm64 runner.
+        os: [macos-14, windows-latest] # arm64 dmg / x64 nsis
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # upload release assets
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Fail loud if dugite's postinstall was skipped (e.g. dropped from
+      # pnpm.onlyBuiltDependencies) — otherwise node_modules/dugite/git/ is
+      # silently empty and workspace creation breaks at runtime, not build.
+      - name: Verify bundled git (dugite) was fetched
+        run: |
+          node -e "const{existsSync}=require('fs');const{dirname,join}=require('path');const g=join(dirname(require.resolve('dugite/package.json')),'git');if(!existsSync(g)){console.error('dugite embedded git MISSING at '+g);process.exit(1)}console.log('dugite embedded git OK '+g)"
+
+      - name: Build Alice + UTA + desktop shell
+        run: pnpm electron:build
+
+      - name: Package installer (unsigned)
+        # electron-builder picks the target + arch from the host runner (mac
+        # arm64 / mac x64 / win x64). --publish never: build only, softprops
+        # does the upload so the release object has one owner.
+        run: pnpm -F @traderalice/desktop exec electron-builder --projectDir ../.. --publish never
+
+      - name: Attach installer to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release.outputs.tag }}
+          files: |
+            dist/electron-app/*.dmg
+            dist/electron-app/*.exe
