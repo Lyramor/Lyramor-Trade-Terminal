@@ -55,8 +55,21 @@ const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 // adapter's own resume flag.
 const AGENT_SESSION_ID_RE = /^[A-Za-z0-9_.-]{8,128}$/;
 
-/** Upper bound on a quick-chat seed prompt — matches the headless-dispatch cap. */
+/**
+ * Upper bound on a seed prompt that rides the interactive TUI's `argv`
+ * (`composeCommand` appends `-- <prompt>`). Conservative on purpose: Windows
+ * caps the whole command line at ~32k chars, so we stay well under. Matches the
+ * headless-dispatch cap.
+ */
 const MAX_SEED_PROMPT = 16000;
+
+/**
+ * Upper bound on a CHAT seed prompt. The chat transport delivers the first
+ * message over stdin (`session.send`), not `argv`, so the argv limit above does
+ * not apply — a user pasting a long brief into "Ask Alice" shouldn't be
+ * rejected. Kept finite only to bound absurd payloads (~25k tokens).
+ */
+const MAX_CHAT_SEED_PROMPT = 100000;
 
 // In-flight resume coalescing, keyed `${wsId}::${recordId}`. A frontend
 // double-fire (two POST /resume within ms — ANG-120) would otherwise both pass
@@ -93,6 +106,7 @@ function todayChatTag(): string {
  */
 function parseSeedPrompt(
   raw: unknown,
+  max: number = MAX_SEED_PROMPT,
 ): { prompt: string } | { error: string; message: string } | null {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'string') {
@@ -100,8 +114,8 @@ function parseSeedPrompt(
   }
   const trimmed = raw.trim();
   if (trimmed.length === 0) return null;
-  if (trimmed.length > MAX_SEED_PROMPT) {
-    return { error: 'prompt_too_long', message: `max ${MAX_SEED_PROMPT} chars` };
+  if (trimmed.length > max) {
+    return { error: 'prompt_too_long', message: `max ${max} chars` };
   }
   return { prompt: trimmed };
 }
@@ -729,7 +743,12 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     try {
       const body = await safeJson(c);
       const fields = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-      const seed = parseSeedPrompt(fields['prompt']);
+      // Quick-chat routes chat-capable runtimes (claude/codex/opencode/pi) to
+      // the chat transport, which delivers the first message over stdin — the
+      // argv cap doesn't apply, so validate against the generous chat cap here.
+      // The interactive (argv) fallback is re-checked against MAX_SEED_PROMPT
+      // below, once the resolved adapter tells us which path we're taking.
+      const seed = parseSeedPrompt(fields['prompt'], MAX_CHAT_SEED_PROMPT);
       if (seed === null) return c.json({ error: 'prompt_required' }, 400);
       if ('error' in seed) return c.json(seed, 400);
       prompt = seed.prompt;
@@ -787,6 +806,13 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     const useChat =
       adapter.capabilities.chat === true &&
       (adapter.composeChatCommand !== undefined || adapter.composeChatTurn !== undefined);
+    // Interactive fallback (a runtime with no chat mode) rides the argv path,
+    // so re-apply the conservative command-line cap the chat path was exempt
+    // from. Practically unreachable (the composer only offers chat-capable
+    // CLIs), but keeps a long paste from overflowing argv if one ever gets here.
+    if (!useChat && prompt.length > MAX_SEED_PROMPT) {
+      return c.json({ error: 'prompt_too_long', message: `max ${MAX_SEED_PROMPT} chars` }, 400);
+    }
     const spawn = useChat
       ? await spawnChatSessionFor(meta, {
           ...(agentId !== undefined ? { agentId } : {}),

@@ -147,6 +147,37 @@ describe('POST /quick-chat — loginless credential injection', () => {
     expect(r.body.session.title).toBe('analisa BBCA');
   });
 
+  // Seed-prompt caps split by transport: the chat path delivers over stdin (no
+  // argv limit), so a long paste that would overflow a command line is fine;
+  // the interactive/PTY path keeps the conservative argv-safe cap.
+  it('claude → chat accepts a long prompt over the argv cap (stdin delivery)', async () => {
+    const long = 'x'.repeat(20000); // > MAX_SEED_PROMPT (16000), < MAX_CHAT_SEED_PROMPT
+    const { app, spawnChatSession, chatSend } = build();
+    const r = await quickChat(app, { prompt: long, agent: 'claude' });
+    expect(r.status).toBe(201);
+    expect(spawnChatSession).toHaveBeenCalledOnce();
+    expect(chatSend).toHaveBeenCalledWith(long);
+  });
+
+  it('claude → chat still rejects an absurd prompt over the chat cap', async () => {
+    const huge = 'x'.repeat(100001); // > MAX_CHAT_SEED_PROMPT (100000)
+    const { app, spawnChatSession } = build();
+    const r = await quickChat(app, { prompt: huge, agent: 'claude' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('prompt_too_long');
+    expect(spawnChatSession).not.toHaveBeenCalled();
+  });
+
+  it('opencode (PTY/argv) rejects a prompt over the argv cap', async () => {
+    vi.mocked(readCredentials).mockResolvedValue({ 'openai-1': openaiKey });
+    const long = 'x'.repeat(20000); // fine for chat, too long for the argv path
+    const { app, spawn } = build();
+    const r = await quickChat(app, { prompt: long, agent: 'opencode' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('prompt_too_long');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it('opencode has no chat mode → still the PTY pool', async () => {
     vi.mocked(readCredentials).mockResolvedValue({ 'openai-1': openaiKey });
     const { app, spawn, spawnChatSession } = build();
