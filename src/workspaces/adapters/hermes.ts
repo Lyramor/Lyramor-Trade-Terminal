@@ -35,15 +35,13 @@ import type { CliAdapter, SpawnContext } from '../cli-adapter.js';
  * Lyramor's headless/interactive spawns use a clean env, so this does not
  * apply to launcher-driven runs; keep it in mind when reproducing manually.
  *
- * KNOWN LIMITATION — headless runs are NOT reopenable by id from the
- * launcher today: `hermes` prints `session_id: <id>` to STDERR
- * (`cli.py: print(f"\nsession_id: …", file=sys.stderr)` — hardcoded), and
- * the headless-task runner only feeds STDOUT lines to
- * `extractHeadlessSessionId`. The headless task itself runs fine and the
- * agent reports via `inbox_push`; only the "reopen a finished headless run
- * as an interactive session" path is unavailable for hermes (the resume
- * hint is never harvested). If Hermes ever moves the id to stdout, mount
- * `extractHeadlessSessionId` with `/^session_id:\s*(\S+)\s*$/`.
+ * SESSION-ID REOPEN: `hermes chat -q <prompt> -Q` prints `session_id: <id>`
+ * to STDERR (`cli.py: print(f"\nsession_id: …", file=sys.stderr)` —
+ * hardcoded), unlike the other agents which announce on stdout. The adapter
+ * therefore declares `headlessSessionIdOnStderr: true` and the headless-task
+ * runner feeds stderr lines to the extractor when that flag is set, so a
+ * finished headless run IS reopenable by id (resume hint harvested). Fixture:
+ * `session_id: 20260808_194633_641b80` (captured live 2026-08).
  *
  * PROVIDER override: none at the workspace level — Hermes reads its global
  * `~/.hermes/config.yaml` + `.env` for the provider/model, so
@@ -91,10 +89,18 @@ export const hermesAdapter: CliAdapter = {
   // boundary, quiet output (`-Q` strips banner/spinner). Rules/docs from
   // AGENTS.md in the cwd are loaded natively, so the agent sees the same
   // workspace instructions as every other channel.
-  // NOTE: no extractHeadlessSessionId — hermes prints the id to stderr, which
-  // the headless runner never reads (see KNOWN LIMITATION in the header).
   composeHeadlessCommand(_base: readonly string[], _ctx: SpawnContext, prompt: string): readonly string[] {
     return ['hermes', 'chat', '-q', prompt, '-Q'];
+  },
+
+  // hermes announces its session id on STDERR (`print(..., file=sys.stderr)`
+  // in cli.py), unlike the other agents' stdout JSON. The runner feeds stderr
+  // lines to the extractor only when headlessSessionIdOnStderr is set, so the
+  // finished headless run stays reopenable by id.
+  headlessSessionIdOnStderr: true,
+  extractHeadlessSessionId(line: string): string | null {
+    const m = /^session_id:\s*(\S+)\s*$/.exec(line);
+    return m ? m[1] : null;
   },
 
   // Per-turn chat: not implemented (no JSON harness in Hermes CLI). The

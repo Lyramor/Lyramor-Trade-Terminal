@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { claudeAdapter } from './claude.js';
 import { codexAdapter } from './codex.js';
+import { hermesAdapter } from './hermes.js';
 import { opencodeAdapter } from './opencode.js';
 import { piAdapter } from './pi.js';
 
@@ -55,15 +56,25 @@ describe('extractHeadlessSessionId', () => {
     ).toBeNull();
   });
 
+  it('hermes: stderr line `session_id: <id>` (announced on stderr, not stdout)', () => {
+    expect(hermesAdapter.headlessSessionIdOnStderr).toBe(true);
+    expect(hermesAdapter.extractHeadlessSessionId?.('session_id: 20260808_194633_641b80')).toBe(
+      '20260808_194633_641b80',
+    );
+    // hermes announces on stderr, so non-matching stderr lines stay null.
+    expect(hermesAdapter.extractHeadlessSessionId?.('warning: mem0 insecure connection')).toBeNull();
+    expect(hermesAdapter.extractHeadlessSessionId?.('oke')).toBeNull();
+  });
+
   it('non-JSON and irrelevant lines return null everywhere', () => {
-    for (const adapter of [claudeAdapter, codexAdapter, opencodeAdapter, piAdapter]) {
+    for (const adapter of [claudeAdapter, codexAdapter, opencodeAdapter, piAdapter, hermesAdapter]) {
       expect(adapter.extractHeadlessSessionId?.('plain text noise')).toBeNull();
       expect(adapter.extractHeadlessSessionId?.('{"type":"other"}')).toBeNull();
     }
   });
 
   it('every headless-capable adapter declares an extractor', () => {
-    for (const adapter of [claudeAdapter, codexAdapter, opencodeAdapter, piAdapter]) {
+    for (const adapter of [claudeAdapter, codexAdapter, opencodeAdapter, piAdapter, hermesAdapter]) {
       expect(adapter.capabilities.headless).toBe(true);
       expect(typeof adapter.extractHeadlessSessionId).toBe('function');
     }

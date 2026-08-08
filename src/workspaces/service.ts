@@ -523,7 +523,10 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
       logger: launcherLogger.child({ scope: 'headless', wsId: ws.id, agent: adapter.id }),
       ...(logPaths ? { stdoutFile: logPaths.stdout, stderrFile: logPaths.stderr } : {}),
       ...(adapter.extractHeadlessSessionId
-        ? { extractSessionId: adapter.extractHeadlessSessionId.bind(adapter) }
+        ? {
+            extractSessionId: adapter.extractHeadlessSessionId.bind(adapter),
+            scanStderr: adapter.headlessSessionIdOnStderr === true,
+          }
         : {}),
       ...(opts.onSessionId ? { onSessionId: opts.onSessionId } : {}),
     });

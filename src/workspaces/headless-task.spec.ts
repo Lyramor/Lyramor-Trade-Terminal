@@ -107,6 +107,34 @@ describe('runHeadlessTask', () => {
     expect(r.agentSessionId).toBeNull();
   });
 
+  it('scans stderr for the session id only when scanStderr is set', async () => {
+    // hermes announces its id on stderr; stdout only carries the answer text.
+    const script =
+      'process.stdout.write(\'oke\\n\');' +
+      'process.stderr.write(\'warning: mem0 insecure connection\\n\');' +
+      'process.stderr.write(\'session_id: 20260808_194633_641b80\\n\');';
+    const seen: string[] = [];
+    const run = (scanStderr: boolean) =>
+      runHeadlessTask({
+        command: ['node', '-e', script],
+        cwd: process.cwd(),
+        env: baseEnv,
+        timeoutMs: 5_000,
+        logger: noopLogger,
+        extractSessionId: (line) => {
+          const m = /^session_id:\s*(\S+)\s*$/.exec(line);
+          return m ? m[1] : null;
+        },
+        scanStderr,
+        onSessionId: (id) => seen.push(id),
+      });
+    // Without the flag the stderr announcement is invisible → no id.
+    expect((await run(false)).agentSessionId).toBeNull();
+    // With the flag the id is harvested once (non-matching stderr ignored).
+    expect((await run(true)).agentSessionId).toBe('20260808_194633_641b80');
+    expect(seen).toEqual(['20260808_194633_641b80']);
+  });
+
   it('streams the FULL stdout/stderr to log files (beyond the 16KB tails)', async () => {
     const { mkdtemp, readFile, rm } = await import('node:fs/promises');
     const { tmpdir } = await import('node:os');

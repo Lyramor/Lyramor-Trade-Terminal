@@ -65,11 +65,18 @@ describe('hermesAdapter', () => {
     ]);
   });
 
-  it('no extractHeadlessSessionId: hermes prints session_id to stderr, the headless runner never sees it', () => {
-    // Hermes hardcodes `print(f"\nsession_id: …", file=sys.stderr)` and the
-    // headless-task runner feeds only STDOUT lines to extractHeadlessSessionId
-    // — so the adapter must NOT claim id harvesting it cannot deliver.
-    expect(hermesAdapter.extractHeadlessSessionId).toBeUndefined();
+  it('extractHeadlessSessionId: parses the stderr session_id line', () => {
+    // hermes hardcodes `print(f"\nsession_id: …", file=sys.stderr)` — the
+    // adapter flags stderr scanning and the runner feeds stderr lines to the
+    // extractor when headlessSessionIdOnStderr is set. Fixture captured live
+    // 2026-08-08 (`hermes chat -q … -Q`).
+    expect(hermesAdapter.headlessSessionIdOnStderr).toBe(true);
+    expect(hermesAdapter.extractHeadlessSessionId?.('session_id: 20260808_194633_641b80')).toBe(
+      '20260808_194633_641b80',
+    );
+    // Answer text on stderr / other lines must NOT match.
+    expect(hermesAdapter.extractHeadlessSessionId?.('oke')).toBeNull();
+    expect(hermesAdapter.extractHeadlessSessionId?.('{noise}')).toBeNull();
   });
 
   it('no per-workspace AI-config writer (Hermes reads its global ~/.hermes config)', () => {
