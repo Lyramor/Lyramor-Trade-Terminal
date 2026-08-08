@@ -18,6 +18,7 @@ import { claudeAdapter } from './adapters/claude.js';
 import { codexAdapter } from './adapters/codex.js';
 import { opencodeAdapter } from './adapters/opencode.js';
 import { piAdapter } from './adapters/pi.js';
+import { hermesAdapter } from './adapters/hermes.js';
 import { shellAdapter } from './adapters/shell.js';
 import { AdapterRegistry, type CliAdapter } from './cli-adapter.js';
 import { loadConfig, type ServerConfig } from './config.js';
@@ -295,6 +296,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
   adapters.register(codexAdapter);
   adapters.register(opencodeAdapter);
   adapters.register(piAdapter);
+  adapters.register(hermesAdapter);
   adapters.register(shellAdapter);
 
   const creator = new WorkspaceCreator({
