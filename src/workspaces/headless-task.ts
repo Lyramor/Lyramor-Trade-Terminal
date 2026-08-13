@@ -56,6 +56,13 @@ export interface HeadlessTaskArgs {
    * reopened as an interactive session).
    */
   readonly extractSessionId?: (line: string) => string | null;
+  /**
+   * Also feed STDERR lines to the scanner. Most agents announce their session
+   * id on stdout; `hermes` is the exception — it hardcodes the id to stderr
+   * (`print(f"\nsession_id: …", file=sys.stderr)`), so the hermes adapter sets
+   * this to keep the reopen-by-id path working. Default: stdout only.
+   */
+  readonly scanStderr?: boolean;
   readonly onSessionId?: (id: string) => void;
 }
 
@@ -208,6 +215,8 @@ export async function runHeadlessTask(args: HeadlessTaskArgs): Promise<HeadlessT
   });
   child.stderr?.on('data', (d: Buffer) => {
     errSink.push(d);
+    // hermes announces its session id on stderr — scan it when the adapter asks.
+    if (args.scanStderr) scanner?.push(d);
     errFile?.write(d);
   });
 

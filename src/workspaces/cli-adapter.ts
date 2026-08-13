@@ -275,6 +275,16 @@ export interface CliAdapter {
    */
   extractHeadlessSessionId?(line: string): string | null;
 
+  /**
+   * True when `extractHeadlessSessionId` matches the CLI's STDERR stream
+   * instead of (or in addition to) stdout. All in-repo agents announce on
+   * stdout; hermes is the exception (`hermes chat -q … -Q` hardcodes the id
+   * to stderr). The headless runner feeds stderr lines to the extractor only
+   * when this is set — otherwise CLI noise on stderr could false-positive
+   * the session-id scan.
+   */
+  headlessSessionIdOnStderr?: boolean;
+
   /** Optional per-CLI env adjustments on top of `spawn-env.ts`'s baseline. */
   envOverrides?(parent: NodeJS.ProcessEnv): EnvOverrides;
 
