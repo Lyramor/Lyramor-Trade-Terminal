@@ -362,5 +362,6 @@ export const ja: Resources = {
     hideToken: 'トークンを非表示',
     attemptsRemaining: '残り試行回数: {{n}} 回（超えると一時ロック）',
     lockedOut: '試行回数が多すぎます。{{seconds}} 秒後に再試行してください。',
+    signOut: 'サインアウト',
   },
 }

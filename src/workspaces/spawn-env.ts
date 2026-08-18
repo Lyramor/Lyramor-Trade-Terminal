@@ -31,6 +31,20 @@ const STRIP_PREFIXES = [
   'GHOSTTY_',
 ];
 
+/**
+ * Names that survive `STRIP_PREFIXES`. The prefix list exists to drop
+ * terminal-IDENTITY breadcrumbs, but `CLAUDE_CODE_OAUTH_TOKEN` is a
+ * CREDENTIAL an operator sets deliberately (`claude setup-token`) — the
+ * standard way to authenticate the CLI on a headless host where no browser
+ * can run the OAuth dance. Stripping it made every workspace session fall
+ * back to a stale `~/.claude/.credentials.json` and die with "OAuth session
+ * expired", while a plain `docker exec … claude` (unstripped env) worked —
+ * which is exactly how this was diagnosed.
+ */
+const STRIP_EXCEPTIONS = new Set<string>([
+  'CLAUDE_CODE_OAUTH_TOKEN',
+]);
+
 const SELF_VERSION = '0.1.0';
 
 export function buildSpawnEnv(
@@ -70,6 +84,7 @@ export function buildSpawnEnv(
 }
 
 function shouldStrip(name: string): boolean {
+  if (STRIP_EXCEPTIONS.has(name)) return false;
   if (STRIP_EXACT.has(name)) return true;
   return STRIP_PREFIXES.some((p) => name.startsWith(p));
 }

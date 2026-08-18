@@ -20,6 +20,13 @@ services:
     restart: unless-stopped
     env_file:
       - .env.vps
+    # This host has NO IPv6 egress. Anything in this namespace that tries an
+    # AAAA connection first (the Hermes gateway's httpx → api.telegram.org)
+    # hangs indefinitely; disabling IPv6 makes it fail fast and use IPv4.
+    # Lives here, not on hermes-gateway, because that service shares this
+    # namespace (network_mode: service:openalice).
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: "1"
     ports:
       # Web UI, loopback-only: this VPS is internet-facing, so access goes
       # through an SSH tunnel (or an nginx vhost) instead of a raw public
@@ -36,6 +43,32 @@ services:
     # the interactive OAuth flow.
     stdin_open: true
     tty: true
+
+  # Hermes messaging gateway — bridges Telegram (and other platforms) to the
+  # Hermes agent that lives in the shared /data volume. Separate service so
+  # it survives OpenAlice restarts and gets its own restart policy; same
+  # image, so the hermes install and HOME=/data/home env are already there.
+  # First-time user access is approved via `docker exec hermes-gateway
+  # hermes pairing approve <code>`.
+  hermes-gateway:
+    image: openalice:local
+    container_name: hermes-gateway
+    restart: unless-stopped
+    entrypoint: ["/usr/bin/tini", "--"]
+    command: ["hermes", "gateway", "run"]
+    # Share OpenAlice's network namespace so the gateway reaches the MCP
+    # server on 127.0.0.1:47332. That listener is unauthenticated BY DESIGN
+    # and loopback-bound (src/server/mcp.ts) — joining the namespace keeps
+    # that boundary intact instead of exposing the port on the network.
+    # NOTE: this also means the IPv6 sysctl below lives on the `openalice`
+    # service, and the gateway cannot declare `ports` of its own.
+    network_mode: "service:openalice"
+    depends_on:
+      - openalice
+    volumes:
+      - openalice-data:/data
+    env_file:
+      - .env.vps
 
 volumes:
   openalice-data:

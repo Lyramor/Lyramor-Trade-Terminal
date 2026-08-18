@@ -373,6 +373,7 @@ export const en = {
     hideToken: 'Hide token',
     attemptsRemaining: '{{n}} attempts remaining before a temporary lockout',
     lockedOut: 'Too many failed attempts. Try again in {{seconds}}s.',
+    signOut: 'Sign out',
   },
 } as const
 

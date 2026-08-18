@@ -41,4 +41,18 @@ describe('buildSpawnEnv', () => {
     const out = buildSpawnEnv({ PWD: '/somewhere/else' }, {}, '/ws/dir')
     expect(out['PWD']).toBe('/ws/dir')
   })
+
+  it('strips CLAUDE_CODE_ terminal breadcrumbs but keeps the OAuth token', () => {
+    const out = buildSpawnEnv({
+      CLAUDE_CODE_SSE_PORT: '1234',
+      CLAUDE_CODE_ENTRYPOINT: 'vscode',
+      CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-xxx',
+    })
+    // Identity breadcrumbs still go — they're what confuse the child CLI.
+    expect(out['CLAUDE_CODE_SSE_PORT']).toBeUndefined()
+    expect(out['CLAUDE_CODE_ENTRYPOINT']).toBeUndefined()
+    // The credential survives: on a headless host it is the ONLY way the
+    // spawned CLI can authenticate (no browser for the OAuth dance).
+    expect(out['CLAUDE_CODE_OAUTH_TOKEN']).toBe('sk-ant-oat01-xxx')
+  })
 })

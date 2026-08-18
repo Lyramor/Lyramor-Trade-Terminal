@@ -1,6 +1,8 @@
-import { type LucideIcon, MessageSquare, Inbox, Telescope, LineChart, GitBranch, BarChart3, Newspaper, Zap, Settings, Code2, TerminalSquare, ChevronDown, Info, ListChecks } from 'lucide-react'
+import { type LucideIcon, MessageSquare, Inbox, Telescope, LineChart, GitBranch, BarChart3, Newspaper, Zap, Settings, Code2, TerminalSquare, ChevronDown, Info, ListChecks, LogOut } from 'lucide-react'
 import { useState } from 'react'
 import { type Page } from '../App'
+import { useAuth } from '../auth/AuthContext'
+import { logout } from '../auth/api'
 import { findSectionForActivity } from '../sections'
 import { useWorkspace } from '../tabs/store'
 import type { ActivitySection, ViewSpec } from '../tabs/types'
@@ -338,11 +340,47 @@ export function ActivityBar({ open, onClose, onItemActivated, sidebarVisible = t
         {/* Footer — global toggles pinned to the bottom of the rail.
             py-1.5 matches the nav-item rhythm above (the top border
             already provides the separation). */}
-        <div className="shrink-0 border-t border-border px-3 py-1.5">
+        <div className="shrink-0 border-t border-border px-3 py-1.5 flex flex-col gap-1">
           <ThemeToggle />
+          <SignOutButton />
         </div>
       </aside>
     </>
+  )
+}
+
+// ==================== SignOutButton ====================
+
+/**
+ * Footer row that ends the session: revokes it server-side, then flips the
+ * AuthContext to login-required so the LoginPage takes over. Styled to match
+ * ThemeToggle's nav-row look so the footer reads as one control group.
+ */
+function SignOutButton() {
+  const { t } = useTranslation()
+  const { markUnauthorized } = useAuth()
+  const [busy, setBusy] = useState(false)
+  const onClick = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await logout()
+    } finally {
+      markUnauthorized()
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => { void onClick() }}
+      disabled={busy}
+      className="relative flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-left text-[13px] text-text-muted transition-colors hover:bg-overlay hover:text-text disabled:opacity-60"
+    >
+      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+        <LogOut size={16} strokeWidth={1.75} aria-hidden />
+      </span>
+      <span className="flex-1 truncate">{t('auth.signOut')}</span>
+    </button>
   )
 }
 

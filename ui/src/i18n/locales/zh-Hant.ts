@@ -370,5 +370,6 @@ export const zhHant: Resources = {
     hideToken: '隱藏權杖',
     attemptsRemaining: '剩餘嘗試次數：{{n}} 次（超出將暫時鎖定）',
     lockedOut: '嘗試次數過多，請在 {{seconds}} 秒後重試。',
+    signOut: '登出',
   },
 }

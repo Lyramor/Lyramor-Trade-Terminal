@@ -362,5 +362,6 @@ export const zh: Resources = {
     hideToken: '隐藏令牌',
     attemptsRemaining: '剩余尝试次数：{{n}} 次（超出将暂时锁定）',
     lockedOut: '尝试次数过多，请在 {{seconds}} 秒后重试。',
+    signOut: '退出登录',
   },
 }

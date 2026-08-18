@@ -100,6 +100,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://hermes-agent.nousresearch.com/install.sh \
         | bash -s -- --skip-browser --skip-setup --non-interactive \
     && hermes --version \
+    # `hermes send` (used by scheduled trading runs to push fills to Telegram)
+    # needs python-telegram-bot. The gateway lazy-installs it on first use, but
+    # that lands in ONE container's writable layer — the scheduled runs live in
+    # the other container, so bake it in for both.
+    && /usr/local/lib/hermes-agent/venv/bin/pip install --no-cache-dir "python-telegram-bot>=22" \
     && apt-get purge -y make g++ \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
