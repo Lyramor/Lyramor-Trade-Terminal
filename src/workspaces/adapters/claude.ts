@@ -92,10 +92,20 @@ export const claudeAdapter: CliAdapter = {
   // progress in the task log AND every event carries `session_id`, so the
   // run's identity is captured from line 1 instead of parsed out of a final
   // result blob (verified 2.1.x, 2026-06-11).
+  // `--permission-mode bypassPermissions` is load-bearing here for the same
+  // reason as chat, only worse: a headless run is unattended BY DEFINITION —
+  // there is no human and no UI to answer an approval prompt. Without it the
+  // agent gets "This command requires approval" on every Bash call and the
+  // run completes having done nothing, exit code 0, looking like a success.
+  // (Observed 2026-08-18: scheduled trading mandates fired on time, exited
+  // clean, and never placed an order.) AUTOTRUST_SETTINGS does NOT cover this
+  // — it only enables project MCP servers, not tool permissions. A workspace
+  // is the autonomy boundary; that is the whole point of dispatching to one.
   composeHeadlessCommand(base: readonly string[], _ctx: SpawnContext, prompt: string): readonly string[] {
     return [
       ...base,
       '--settings', AUTOTRUST_SETTINGS,
+      '--permission-mode', 'bypassPermissions',
       '-p', '--output-format', 'stream-json', '--verbose',
       '--', prompt,
     ];

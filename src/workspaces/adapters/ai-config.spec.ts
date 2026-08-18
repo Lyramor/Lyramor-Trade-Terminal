@@ -322,6 +322,8 @@ describe('composeHeadlessCommand (one-shot headless argv, prompt placed per-CLI)
       'claude',
       '--settings',
       '{"enableAllProjectMcpServers":true}',
+      '--permission-mode',
+      'bypassPermissions',
       '-p',
       '--output-format',
       'stream-json',
@@ -329,6 +331,16 @@ describe('composeHeadlessCommand (one-shot headless argv, prompt placed per-CLI)
       '--',
       'do x',
     ]);
+  });
+
+  it('claude headless bypasses permissions — an unattended run has no one to approve', () => {
+    // Without this the agent hits "This command requires approval" on every
+    // Bash call, then exits 0 having done nothing: a silent no-op that reads
+    // as success in the task log.
+    const argv = claudeAdapter.composeHeadlessCommand!(['claude'], ctx(), 'do x');
+    const i = argv.indexOf('--permission-mode');
+    expect(i).toBeGreaterThan(-1);
+    expect(argv[i + 1]).toBe('bypassPermissions');
   });
 
   it('codex: CLI-mode headless (no MCP) — approval/sandbox/network -c + exec --json -- <prompt>', () => {
