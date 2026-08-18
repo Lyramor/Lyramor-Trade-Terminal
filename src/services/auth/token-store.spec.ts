@@ -17,6 +17,8 @@ import {
   bootstrapToken,
   generateToken,
   verifyToken,
+  verifyCredentials,
+  setCredentials,
   getTokenInfo,
   clearToken,
 } from './token-store.js'
@@ -118,5 +120,37 @@ describe('token-store', () => {
     if (process.platform !== 'win32') {
       expect(perms).toBe(0o600)
     }
+  })
+})
+
+describe('username + password credentials', () => {
+  it('setCredentials + verifyCredentials round-trips', async () => {
+    await setCredentials('alice', 'sup3r-secret')
+    expect(await verifyCredentials('alice', 'sup3r-secret')).toBe(true)
+  })
+
+  it('rejects a wrong password and a wrong username alike', async () => {
+    await setCredentials('alice', 'sup3r-secret')
+    expect(await verifyCredentials('alice', 'wrong')).toBe(false)
+    expect(await verifyCredentials('bob', 'sup3r-secret')).toBe(false)
+  })
+
+  it('disables raw-token login once a username is configured', async () => {
+    await setCredentials('alice', 'sup3r-secret')
+    expect(await verifyToken('sup3r-secret')).toBe(false)
+  })
+
+  it('legacy token-only file accepts any username with the right password', async () => {
+    const token = await generateToken()
+    expect(await verifyCredentials('whoever', token)).toBe(true)
+    expect(await verifyCredentials('whoever', 'wrong')).toBe(false)
+  })
+
+  it('does not persist the plaintext password or leak it via metadata', async () => {
+    await setCredentials('alice', 'sup3r-secret')
+    const fileText = await readFile(AUTH_FILE, 'utf-8')
+    expect(fileText).not.toContain('sup3r-secret')
+    const info = await getTokenInfo()
+    expect(info.exists).toBe(true)
   })
 })

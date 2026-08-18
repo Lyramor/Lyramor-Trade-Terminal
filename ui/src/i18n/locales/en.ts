@@ -359,12 +359,20 @@ export const en = {
   },
   auth: {
     heading: 'Sign in to Lyramor',
-    instruction: 'Paste the admin token shown on first launch.',
+    instruction: 'Sign in with your username and password.',
     adminTokenLabel: 'Admin token',
+    usernameLabel: 'Username',
+    passwordLabel: 'Password',
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
     signingIn: 'Signing in…',
     signIn: 'Sign in',
     noTokenHeading: 'No admin token configured',
     loginFailed: 'Login failed',
+    showToken: 'Show token',
+    hideToken: 'Hide token',
+    attemptsRemaining: '{{n}} attempts remaining before a temporary lockout',
+    lockedOut: 'Too many failed attempts. Try again in {{seconds}}s.',
   },
 } as const
 

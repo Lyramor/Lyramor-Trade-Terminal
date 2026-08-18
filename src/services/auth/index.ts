@@ -11,6 +11,8 @@ export {
   bootstrapToken,
   generateToken,
   verifyToken,
+  verifyCredentials,
+  setCredentials,
   getTokenInfo,
   clearToken,
   type TokenInfo,

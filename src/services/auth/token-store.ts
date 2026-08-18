@@ -33,6 +33,9 @@ const AUTH_FILE = () => dataPath('config', 'auth.json')
 interface AuthFile {
   version: 1
   scheme: 'scrypt'
+  /** When set, login requires this username alongside the password and
+   *  the raw-token login path is disabled (see verifyToken). */
+  username?: string
   salt: string        // base64
   hash: string        // base64
   params: { N: number; r: number; p: number; keyLen: number }
@@ -102,10 +105,58 @@ export async function generateToken(): Promise<string> {
 /**
  * Constant-time check of a candidate token against the stored hash.
  * Returns false if no auth file exists or the file is malformed.
+ * Disabled (always false) once a username is configured — username +
+ * password then becomes the only accepted credential pair, so knowing
+ * the password alone is not enough.
  */
 export async function verifyToken(candidate: string): Promise<boolean> {
   const file = await readAuthFile()
   if (!file) return false
+  if (file.username) return false
+  return verifyAgainstFile(file, candidate)
+}
+
+/**
+ * Username + password check. When the auth file records a username, the
+ * candidate username must match exactly before the password hash is even
+ * consulted. Files without a username (legacy token-only records) accept
+ * any username so an upgraded UI keeps working against an old file.
+ */
+export async function verifyCredentials(username: string, password: string): Promise<boolean> {
+  const file = await readAuthFile()
+  if (!file) return false
+  if (file.username && file.username !== username) {
+    // Still burn a hash derivation so "wrong username" and "wrong
+    // password" are indistinguishable by timing.
+    verifyAgainstFile(file, password)
+    return false
+  }
+  return verifyAgainstFile(file, password)
+}
+
+/**
+ * Operator-set credentials: replaces the auth file with the given
+ * username + password (scrypt-hashed). All existing sessions stay valid
+ * — rotate them separately via session revocation if needed.
+ */
+export async function setCredentials(username: string, password: string): Promise<void> {
+  const salt = randomBytes(SALT_BYTES)
+  const hash = deriveHash(password, salt)
+  const now = new Date().toISOString()
+  const existing = await readAuthFile()
+  await writeAuthFile({
+    version: 1,
+    scheme: 'scrypt',
+    username,
+    salt: salt.toString('base64'),
+    hash: hash.toString('base64'),
+    params: { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P, keyLen: KEY_LEN },
+    createdAt: existing?.createdAt ?? now,
+    lastRotatedAt: now,
+  })
+}
+
+function verifyAgainstFile(file: AuthFile, candidate: string): boolean {
   const salt = Buffer.from(file.salt, 'base64')
   const stored = Buffer.from(file.hash, 'base64')
   // Re-derive using the params actually recorded in the file (forward

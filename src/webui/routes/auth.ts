@@ -14,11 +14,17 @@ import { setCookie, deleteCookie } from 'hono/cookie'
 import { z } from 'zod'
 import {
   verifyToken,
+  verifyCredentials,
   createSession,
   revokeSession,
   validateAndTouch,
   getTokenInfo,
 } from '@/services/auth/index.js'
+import {
+  checkAttempt,
+  recordFailure,
+  recordSuccess,
+} from '@/services/auth/login-throttle.js'
 import {
   SESSION_COOKIE_NAME,
   isLoopbackIp,
@@ -26,9 +32,18 @@ import {
   getSocketRemoteAddress,
 } from '../middleware/auth.js'
 
-const loginSchema = z.object({
-  token: z.string().min(1, 'token is required'),
-})
+// Two accepted credential shapes: username + password (the normal login
+// form) and the legacy single admin token (kept for CLI / pre-upgrade
+// clients; it stops verifying once a username is configured).
+const loginSchema = z.union([
+  z.object({
+    username: z.string().min(1, 'username is required'),
+    password: z.string().min(1, 'password is required'),
+  }),
+  z.object({
+    token: z.string().min(1, 'token is required'),
+  }),
+])
 
 export interface AuthRouteOptions {
   /** Should `Set-Cookie` mark the session cookie `Secure`? Set true in
@@ -100,14 +115,35 @@ export function createAuthRoutes(opts: AuthRouteOptions = {}) {
       return c.json({ error: 'Invalid request' }, 400)
     }
 
-    const ok = await verifyToken(parsed.data.token)
-    if (!ok) {
-      // Don't reveal whether the token was malformed vs wrong vs no auth
-      // configured. Constant-ish behavior.
-      return c.json({ error: 'Invalid token' }, 401)
+    const fromTrustedProxy = isTrustedProxyPeer(c, trustedProxies)
+    const throttleKey = normalizeIp(readClientIp(c, fromTrustedProxy) ?? 'unknown')
+
+    const gate = checkAttempt(throttleKey)
+    if (!gate.allowed) {
+      return c.json(
+        { error: 'Too many attempts', code: 'LOCKED', retryAfterSeconds: gate.retryAfterSeconds },
+        429,
+      )
     }
 
-    const fromTrustedProxy = isTrustedProxyPeer(c, trustedProxies)
+    const creds = parsed.data
+    const ok = 'token' in creds
+      ? await verifyToken(creds.token)
+      : await verifyCredentials(creds.username, creds.password)
+    if (!ok) {
+      const failure = recordFailure(throttleKey)
+      if (failure.remaining === 0) {
+        return c.json(
+          { error: 'Too many attempts', code: 'LOCKED', retryAfterSeconds: failure.retryAfterSeconds },
+          429,
+        )
+      }
+      // Don't reveal whether the token was malformed vs wrong vs no auth
+      // configured. Constant-ish behavior — `remaining` only leaks the
+      // throttle state, never anything about the stored credential.
+      return c.json({ error: 'Invalid token', remaining: failure.remaining }, 401)
+    }
+    recordSuccess(throttleKey)
     const userAgent = c.req.header('user-agent') ?? undefined
     const ip = readClientIp(c, fromTrustedProxy) ?? undefined
     const session = await createSession({ userAgent, ip })
