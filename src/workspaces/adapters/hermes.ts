@@ -1,4 +1,4 @@
-import type { CliAdapter, SpawnContext } from '../cli-adapter.js';
+import type { CliAdapter, ChatTurnContext, ChatTurnPlan, SpawnContext } from '../cli-adapter.js';
 
 /**
  * Hermes Agent (github.com/NousResearch/hermes-agent; Apache-2.0). Open-source
@@ -68,10 +68,13 @@ export const hermesAdapter: CliAdapter = {
     // headless session ids as resume hints and Hermes `--resume` is by id.
     transcriptDiscovery: 'none',
     headless: true,
-    // No persistent stream-json chat transport in the Hermes CLI (unlike
-    // claude's stream-json); the interactive TUI is PTY-only. Same stance
-    // as shell/pi.
-    chat: false,
+    // Per-turn chat via `hermes chat -q … -Q --resume <id>` (like
+    // codex/opencode/pi's per-turn path). Hermes has no JSON event stream —
+    // `-Q` prints only the final response as plain text — so `chatPlainText`
+    // makes the per-turn session emit the turn's whole stdout as ONE
+    // assistant bubble instead of running an NDJSON normalizer.
+    chat: true,
+    chatPlainText: true,
   },
 
   composeCommand(_base: readonly string[], ctx: SpawnContext): readonly string[] {
@@ -103,6 +106,34 @@ export const hermesAdapter: CliAdapter = {
     return m ? m[1] : null;
   },
 
-  // Per-turn chat: not implemented (no JSON harness in Hermes CLI). The
-  // interface is optional; this adapter is interactive+headless only.
+  // Per-turn chat: each user message is a one-shot `hermes chat -q <msg> -Q`,
+  // resuming the prior turn's session id (harvested from stderr — see
+  // headlessSessionIdOnStderr) so context carries across turns.
+  // `--no-restore-cwd` on resume keeps Hermes in the workspace dir instead of
+  // cd-ing back to the resumed session's recorded cwd (the header's caveat).
+  // deliver:'arg' — the message becomes `-q`'s value; hermes is a native
+  // launcher (not an npm `.cmd` shim), so the argv never routes through
+  // cmd.exe even on win32.
+  composeChatTurn(ctx: ChatTurnContext): ChatTurnPlan {
+    const command = ['hermes', 'chat', '-Q'];
+    if (ctx.resumeSessionId) command.push('--resume', ctx.resumeSessionId, '--no-restore-cwd');
+    command.push('-q');
+    return { command, deliver: 'arg' };
+  },
+
+  // `-Q` still prints streaming chrome on stdout (verified live 2026-08-18
+  // against hermes 0.20.3 + a reasoning model): a "┌─ Reasoning ─…─┐" box
+  // header, token-by-token partials, and the consolidated reasoning dump —
+  // ALL of it CR-terminated (`…\r\n`), while ONLY the final response is
+  // printed as clean LF lines. That framing difference is the reliable
+  // separator (the box has no closing border, so bracket-matching isn't):
+  // keep the LF-only lines, drop every CR-terminated one. Startup warnings
+  // ("⚠ …") are dropped by prefix as a second guard.
+  filterChatPlainText(raw: string): string {
+    return raw
+      .split('\n')
+      .filter((l) => !l.endsWith('\r'))
+      .filter((l) => !/^[⚠✗]/.test(l.trim()))
+      .join('\n');
+  },
 };

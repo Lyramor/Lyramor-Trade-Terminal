@@ -63,6 +63,7 @@ WORKDIR /app
 # (workspace CLI auth flows, etc.) get reaped.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
+        curl \
         git \
         tini \
     && rm -rf /var/lib/apt/lists/*
@@ -75,9 +76,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN npm install -g \
         @anthropic-ai/claude-code \
         @openai/codex \
+        opencode-ai \
     && claude --version \
     && codex --version \
+    && opencode --version \
     && npm cache clean --force
+
+# Hermes Agent (NousResearch, Apache-2.0) — the 6th workspace channel.
+# The official installer drops the launcher in ~/.local/bin (~ = /root at
+# build time, /data/home at runtime), so both are added to PATH explicitly
+# so the PTY sessions OpenAlice spawns can find it.
+# --skip-browser: Playwright/Chromium download is heavy and times out in
+# docker build (and browser tools aren't used inside the container).
+# --skip-setup/--non-interactive: no TTY at build time; `hermes setup`
+# runs once post-deploy via `docker exec` instead.
+# python3/make/g++ are needed only while npm compiles node-pty (node-gyp);
+# the compilers are purged afterwards to keep the image slim. Hermes's own
+# runtime Python is a uv-managed standalone CPython, not apt's python3.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        make \
+        g++ \
+    && curl -fsSL https://hermes-agent.nousresearch.com/install.sh \
+        | bash -s -- --skip-browser --skip-setup --non-interactive \
+    && hermes --version \
+    && apt-get purge -y make g++ \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+ENV PATH="/data/home/.local/bin:/root/.local/bin:${PATH}"
 
 # Production artifacts. The Guardian script (`scripts/guardian/prod.mjs`)
 # expects `dist/main.js` (Alice) and `services/uta/dist/uta.js` (UTA)
@@ -112,6 +138,12 @@ COPY --from=build /src/scripts                    ./scripts
 #   /data = USER_DATA_HOME      (the volume the user mounts)
 # HOME redirects ~/.claude / ~/.codex / ~/.config etc. into the volume so
 # auth tokens + agent state persist across container rebuild.
+# IS_SANDBOX: Claude Code >= 2.x refuses --permission-mode bypassPermissions
+# under root unless the environment declares itself a sandbox. This image IS
+# an isolated container, so declare it — without this every workspace chat
+# session exits immediately with code 1.
+ENV IS_SANDBOX=1
+
 ENV OPENALICE_APP_HOME=/app \
     OPENALICE_HOME=/data \
     AQ_LAUNCHER_ROOT=/data/workspaces \

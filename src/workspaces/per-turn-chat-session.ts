@@ -82,6 +82,10 @@ export class PerTurnChatSession implements ChatSessionLike {
   private ws: WebSocket | null = null;
   private child: ChildProcess | null = null;
   private stdoutBuf = '';
+  /** Whole-turn stdout accumulator for `capabilities.chatPlainText` adapters. */
+  private plainBuf = '';
+  /** Line buffer for stderr session-id scanning (`headlessSessionIdOnStderr`). */
+  private stderrBuf = '';
   private disposed = false;
   /** Session id to resume the next turn with (mints across turns). */
   private currentSessionId: string | null;
@@ -219,6 +223,8 @@ export class PerTurnChatSession implements ChatSessionLike {
     }
     this.child = child;
     this.stdoutBuf = '';
+    this.plainBuf = '';
+    this.stderrBuf = '';
     this.interruptedTurn = false;
     this.logger.info('chat.turn.spawned', {
       recordId: this.recordId,
@@ -246,6 +252,23 @@ export class PerTurnChatSession implements ChatSessionLike {
         recordId: this.recordId,
         chunk: d.toString('utf8').slice(0, 2000),
       });
+      // Some CLIs (hermes) announce their session id on STDERR — mirror the
+      // headless runner's gated stderr scan so the next turn can resume.
+      if (this.adapter.headlessSessionIdOnStderr && this.adapter.extractHeadlessSessionId) {
+        this.stderrBuf += d.toString('utf8');
+        let nl: number;
+        while ((nl = this.stderrBuf.indexOf('\n')) !== -1) {
+          const line = this.stderrBuf.slice(0, nl).trim();
+          this.stderrBuf = this.stderrBuf.slice(nl + 1);
+          if (!line) continue;
+          const id = this.adapter.extractHeadlessSessionId(line);
+          if (id && id !== this.currentSessionId) {
+            this.currentSessionId = id;
+            this.onAgentSessionId?.(this.recordId, id);
+          }
+        }
+        if (this.stderrBuf.length > SCAN_LINE_MAX_BYTES) this.stderrBuf = '';
+      }
     });
     child.once('exit', (code, signal) => this.onTurnExit(code, signal));
     child.once('error', (err) => {
@@ -263,6 +286,15 @@ export class PerTurnChatSession implements ChatSessionLike {
 
   /** Newline-buffered NDJSON scan of a turn's stdout. */
   private onStdout(chunk: Buffer, normalize: (line: string) => ChatEvent[]): void {
+    // Plain-text adapters (hermes -Q): no NDJSON to scan — accumulate the
+    // whole turn and emit one assistant bubble at the turn boundary.
+    if (this.adapter.capabilities.chatPlainText) {
+      this.plainBuf += chunk.toString('utf8');
+      if (this.plainBuf.length > SCAN_LINE_MAX_BYTES) {
+        this.plainBuf = this.plainBuf.slice(-SCAN_LINE_MAX_BYTES);
+      }
+      return;
+    }
     this.stdoutBuf += chunk.toString('utf8');
     let nl: number;
     while ((nl = this.stdoutBuf.indexOf('\n')) !== -1) {
@@ -306,6 +338,26 @@ export class PerTurnChatSession implements ChatSessionLike {
       this.interruptedTurn = false;
     } else {
       const isError = code !== 0 && code !== null;
+      // Plain-text mode: the turn's whole stdout is the assistant's answer.
+      if (this.adapter.capabilities.chatPlainText) {
+        const filtered = this.adapter.filterChatPlainText?.(this.plainBuf) ?? this.plainBuf;
+        // Defensive: drop a stray `session_id: …` line if the CLI ever moves
+        // it to stdout — it's session plumbing, not answer text.
+        const text = filtered
+          .split('\n')
+          .filter((l) => !/^session_id:\s*\S+\s*$/.test(l.trim()))
+          .join('\n')
+          .trim();
+        this.plainBuf = '';
+        if (text) {
+          const ev: ChatEvent = {
+            type: 'assistant',
+            message: { role: 'assistant', content: [{ type: 'text', text }] },
+          };
+          this.appendTranscript(ev);
+          this.sendToWs({ type: 'event', event: ev });
+        }
+      }
       this.emitTurnResult(
         isError,
         isError ? `Agent turn ended (exit ${code ?? `signal ${signal}`}).` : undefined,

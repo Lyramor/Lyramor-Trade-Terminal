@@ -20,14 +20,64 @@ describe('hermesAdapter', () => {
     expect(hermesAdapter.displayName).toBe('Hermes');
   });
 
-  it('capabilities: interactive resume by id and last, headless, no chat transport', () => {
+  it('capabilities: interactive resume by id and last, headless, plain-text per-turn chat', () => {
     expect(hermesAdapter.capabilities).toMatchObject({
       resumeLast: true,
       resumeById: true,
       headless: true,
-      chat: false,
+      chat: true,
+      chatPlainText: true,
       transcriptDiscovery: 'none',
     });
+  });
+
+  it('composeChatTurn: first turn is a bare one-shot, message delivered as -q value', () => {
+    const plan = hermesAdapter.composeChatTurn!({
+      cwd: '/ws',
+      env: {},
+      resumeSessionId: null,
+      assignedSessionId: 'ignored',
+    });
+    expect(plan.command).toEqual(['hermes', 'chat', '-Q', '-q']);
+    expect(plan.deliver).toBe('arg');
+  });
+
+  it('composeChatTurn: later turns resume by id and pin cwd to the workspace', () => {
+    const plan = hermesAdapter.composeChatTurn!({
+      cwd: '/ws',
+      env: {},
+      resumeSessionId: '20260808_194633_641b80',
+      assignedSessionId: '20260808_194633_641b80',
+    });
+    expect(plan.command).toEqual([
+      'hermes', 'chat', '-Q',
+      '--resume', '20260808_194633_641b80', '--no-restore-cwd',
+      '-q',
+    ]);
+    expect(plan.deliver).toBe('arg');
+  });
+
+  it('filterChatPlainText: keeps only the LF-framed final response, drops CR streaming chrome', () => {
+    // Shape captured live 2026-08-18 (hermes 0.20.3, reasoning model via -Q):
+    // reasoning box + partials + consolidated reasoning are CR-terminated;
+    // only the final response prints as clean LF lines.
+    const raw = [
+      '\r',
+      '┌─ Reasoning ────────────────────┐\r',
+      '\r',
+      'Okay, the user asked for colors,\r',
+      ' so the answer should be short.\r',
+      '\r',
+      'Okay, the user asked for colors, so the answer should be short.\r',
+      'Merah, Biru, Hijau.',
+      '',
+    ].join('\n');
+    expect(hermesAdapter.filterChatPlainText!(raw).trim()).toBe('Merah, Biru, Hijau.');
+  });
+
+  it('filterChatPlainText: drops startup warnings, keeps multi-line answers', () => {
+    const raw = '⚠ tirith security scanner enabled but not available\nBaris satu.\nBaris dua.\n';
+    expect(hermesAdapter.filterChatPlainText!(raw).trim()).toBe('Baris satu.\nBaris dua.');
   });
 
   it('composeCommand: fresh spawn opens the interactive TUI', () => {

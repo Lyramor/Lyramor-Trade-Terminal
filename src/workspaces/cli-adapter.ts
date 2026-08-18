@@ -188,6 +188,14 @@ export interface CliAdapter {
      * this today.
      */
     readonly chat?: boolean;
+    /**
+     * The adapter's per-turn chat output is PLAIN TEXT, not NDJSON events
+     * (hermes `-Q` prints only the final response). The per-turn session then
+     * accumulates a turn's whole stdout and emits it as ONE assistant text
+     * event at the turn boundary instead of running `createChatNormalizer`
+     * per line. Only meaningful alongside `composeChatTurn`.
+     */
+    readonly chatPlainText?: boolean;
   };
 
   /**
@@ -258,6 +266,15 @@ export interface CliAdapter {
    * a fresh instance per turn. Present iff `composeChatTurn` is.
    */
   createChatNormalizer?(): (line: string) => ChatEvent[];
+
+  /**
+   * Optional cleanup of a `chatPlainText` turn's raw stdout before it becomes
+   * the assistant bubble — CLI chrome the quiet mode still prints (hermes -Q
+   * keeps its "┌─ Reasoning ─┐ … └─┘" box and ⚠ startup warnings on stdout).
+   * Return the user-visible answer text. Only consulted when
+   * `capabilities.chatPlainText` is set.
+   */
+  filterChatPlainText?(raw: string): string;
 
   /**
    * Extract the agent's OWN session id from one line of headless stdout.
