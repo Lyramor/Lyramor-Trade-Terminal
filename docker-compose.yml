@@ -20,21 +20,49 @@ services:
     restart: unless-stopped
     env_file:
       - .env.vps
-    # This host has NO IPv6 egress. Anything in this namespace that tries an
-    # AAAA connection first (the Hermes gateway's httpx → api.telegram.org)
-    # hangs indefinitely; disabling IPv6 makes it fail fast and use IPv4.
-    # Lives here, not on hermes-gateway, because that service shares this
-    # namespace (network_mode: service:openalice).
-    sysctls:
-      net.ipv6.conf.all.disable_ipv6: "1"
-    ports:
-      # Web UI, loopback-only: this VPS is internet-facing, so access goes
-      # through an SSH tunnel (or an nginx vhost) instead of a raw public
-      # port. The MCP server (47332) is intentionally NOT exposed — it's
-      # only consumed by the CLIs running inside this container.
-      - "127.0.0.1:47331:47331"
+    # HOST NETWORK NAMESPACE — deliberate, and load-bearing.
+    #
+    # The MCP listener (47332) hardcodes hostname 127.0.0.1 and explicitly
+    # refuses to honor OPENALICE_BIND_HOST (src/server/mcp.ts:184) because it
+    # serves the full trading tool surface with NO auth; its security model is
+    # "only local processes can reach it". Publishing the port therefore does
+    # nothing — docker-proxy forwards via eth0, but the listener only hears on
+    # the container's own loopback.
+    #
+    # The consumer that needs it — the Hermes gateway — now runs on the HOST
+    # as a systemd unit (see the note below, where the in-compose gateway used
+    # to live). Sharing the host netns makes the host's 127.0.0.1 the very
+    # loopback that listener binds, so the gateway qualifies as a local
+    # process without weakening the invariant or exposing a single port.
+    #
+    # REQUIRED COMPANION: .env.vps must set OPENALICE_BIND_HOST=127.0.0.1.
+    # The Dockerfile defaults it to 0.0.0.0, which is correct under bridge
+    # networking but would publish the web UI straight to the internet here.
+    # nginx (ltt.krevostudio.com) proxies to 127.0.0.1:47331, so loopback is
+    # all that is ever needed.
+    #
+    # No `ports:` and no `sysctls:` — both are meaningless (and sysctls is a
+    # hard error) under host networking. The IPv6 sysctl that used to sit here
+    # existed for the in-compose gateway's httpx reaching api.telegram.org
+    # from a netns with no v6 egress; the host has a working global v6
+    # address, so it is no longer needed.
+    network_mode: host
     volumes:
       - openalice-data:/data
+      # Shared Lyramor trading state with the HOST Hermes.
+      #
+      # The 24/7 crypto loop (lyramor_247_cycle.py) now runs from the host's
+      # hermes cron and reads/writes ~/.hermes/state on the host. The hourly
+      # supervisor issue runs as a workspace agent INSIDE this container and
+      # retunes the strategy by writing lyramor_tuning.json. Without this
+      # mount those are two different files and every retune silently does
+      # nothing — the loop keeps running the old numbers and still reports
+      # "ok", which is the worst kind of failure.
+      #
+      # Must be the DIRECTORY, not the two files: the script commits state
+      # with os.replace(tmp, path), which swaps the inode. A file bind-mount
+      # pins an inode and would never see the new content.
+      - /root/.hermes/state:/data/home/.hermes/state
       # Optional: reuse host auth instead of authenticating inside the
       # container. Bind-mount your local credentials read-only.
       # - ${HOME}/.claude:/data/home/.claude:ro
@@ -44,31 +72,22 @@ services:
     stdin_open: true
     tty: true
 
-  # Hermes messaging gateway — bridges Telegram (and other platforms) to the
-  # Hermes agent that lives in the shared /data volume. Separate service so
-  # it survives OpenAlice restarts and gets its own restart policy; same
-  # image, so the hermes install and HOME=/data/home env are already there.
-  # First-time user access is approved via `docker exec hermes-gateway
-  # hermes pairing approve <code>`.
-  hermes-gateway:
-    image: openalice:local
-    container_name: hermes-gateway
-    restart: unless-stopped
-    entrypoint: ["/usr/bin/tini", "--"]
-    command: ["hermes", "gateway", "run"]
-    # Share OpenAlice's network namespace so the gateway reaches the MCP
-    # server on 127.0.0.1:47332. That listener is unauthenticated BY DESIGN
-    # and loopback-bound (src/server/mcp.ts) — joining the namespace keeps
-    # that boundary intact instead of exposing the port on the network.
-    # NOTE: this also means the IPv6 sysctl below lives on the `openalice`
-    # service, and the gateway cannot declare `ports` of its own.
-    network_mode: "service:openalice"
-    depends_on:
-      - openalice
-    volumes:
-      - openalice-data:/data
-    env_file:
-      - .env.vps
+  # NOTE — there is no `hermes-gateway` service any more.
+  #
+  # It ran here until 2026-08-25, sharing this container's netns to reach
+  # the loopback-only MCP port. It died and stayed dead because the VPS
+  # also runs a second Hermes as a host systemd unit, and BOTH used the
+  # same Telegram bot token. Telegram allows one long-poll consumer per
+  # token, so the loser got a permanent 409 Conflict:
+  #
+  #   "Telegram polling could not recover after 5 retries ... another
+  #    process is using the same bot token"
+  #
+  # Rather than issue a second bot, the two were consolidated onto the
+  # host gateway (`systemctl status hermes-gateway`), which now owns the
+  # Telegram surface, the Lyramor MCP toolsets, and the 24/7 trading cron.
+  # That is why 47332/47333 are published above. If you ever bring an
+  # in-compose gateway back, give it its OWN bot token first.
 
 volumes:
   openalice-data:

@@ -118,6 +118,13 @@ COPY --from=build /src/services/uta/dist          ./services/uta/dist
 COPY --from=build /src/ui/dist                    ./ui/dist
 COPY --from=build /src/default                    ./default
 COPY --from=build /src/src/workspaces/templates   ./src/workspaces/templates
+# The `alice*` / `traderhub` CLI shims. `cliBinPath()` prepends this dir to
+# every workspace spawn's PATH, and the templates' AGENTS.md tells the agent
+# those commands exist — so omitting it doesn't fail loudly, it just makes
+# every agent chase a command that isn't there. (Observed 2026-08-18: a
+# scheduled run burned its whole budget hunting `alice-workspace` instead of
+# trading.)
+COPY --from=build /src/src/workspaces/cli         ./src/workspaces/cli
 # tsup bundles backend deps into the entry files where possible, but
 # native modules (node-pty, longbridge, etc.) stay as runtime requires.
 COPY --from=build /src/node_modules               ./node_modules
