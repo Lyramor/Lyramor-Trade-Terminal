@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { formatRelativeTime, getIntlLocale } from '../lib/intl'
 import { api } from '../api'
+import { useFilterParam } from '../hooks/useFilterParam'
 import { isUnsetDecimal } from '../lib/format'
 import type { TradingAccount, WalletStatus, WalletPushResult, WalletCommitLog } from '../api/types'
 
@@ -32,6 +33,9 @@ interface FlatCommit {
   label: string
   commit: WalletCommitLog
 }
+
+/** Nama ruang filter di URL. Lihat `useFilterParam` soal kenapa harus diisi. */
+const HISTORY_SCOPE = 'trading.history'
 
 // ==================== Helpers ====================
 
@@ -110,9 +114,15 @@ export function PushApprovalPanel() {
   const [confirmingPush, setConfirmingPush] = useState<string | null>(null)
   const [lastResult, setLastResult] = useState<{ accountId: string; data: WalletPushResult } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // History UTA filter — null = show every account's commits merged. Holds
-  // an accountId when narrowed to one account's log.
-  const [historyFilter, setHistoryFilter] = useState<string | null>(null)
+  // History UTA filter — string kosong = gabungan semua akun, selain itu satu
+  // accountId. Disimpan di URL, bukan `useState`: di bawah 1024px panel ini
+  // hidup di laci yang dibongkar begitu pengguna pindah aktivitas, jadi pilihan
+  // yang barusan dibuat hilang tiap kali dia kembali ke sini.
+  //
+  // Ini filter tampilan saja. Tidak ada kaitannya dengan apa yang disetujui
+  // atau ditolak: `handlePush` dan `handleReject` tetap bekerja per accountId
+  // dari daftar `pending`, bukan dari nilai ini.
+  const [historyFilter, setHistoryFilter] = useFilterParam('uta', '', { scope: HISTORY_SCOPE })
 
   const poll = useCallback(async () => {
     try {
@@ -381,7 +391,7 @@ export function PushApprovalPanel() {
             {showHistoryFilter && (
               <div className="px-3 pb-2 flex flex-wrap gap-1">
                 <button
-                  onClick={() => setHistoryFilter(null)}
+                  onClick={() => setHistoryFilter('')}
                   className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
                     effectiveFilter === null
                       ? 'bg-bg-tertiary text-text border-border'

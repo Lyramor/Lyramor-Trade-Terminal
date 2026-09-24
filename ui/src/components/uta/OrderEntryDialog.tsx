@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Field, inputClass } from '../form'
+import { TableScroll } from '../layout/TableScroll'
 import { Dialog } from './Dialog'
 import { tradingApi, OrderEntryError } from '../../api/trading'
 import type { WalletPushResult, PlaceOrderRequest, ClosePositionRequest, SubAccountRef } from '../../api/types'
@@ -192,7 +193,11 @@ function PlaceForm({ initialAliceId, ...p }: SharedFormProps & { initialAliceId?
 
       <WalletPicker subAccounts={p.subAccounts} value={subAccountId} onChange={setSubAccountId} />
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* Satu kolom sampai 640px. Di bawah itu dialognya selebar layar, dan
+          dua segmented control berdampingan bikin tombol BUY / SELL jadi
+          sasaran sentuh yang sempit. Salah tekan di baris ini artinya sisi
+          order yang salah, jadi di telepon keduanya dapat baris sendiri. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Action">
           <Segmented value={action} options={[{ id: 'BUY' }, { id: 'SELL' }]} onChange={(v) => setAction(v as 'BUY' | 'SELL')} />
         </Field>
@@ -415,7 +420,10 @@ function OpTable({ title, rows, kind }: { title: string; rows: OpRow[]; kind: 's
   return (
     <div>
       <p className="text-[11px] font-medium text-text-muted uppercase tracking-wide mb-1.5">{title} ({rows.length})</p>
-      <div className="rounded-md border border-border overflow-hidden">
+      {/* Dulu `overflow-hidden`: di dialog selebar 560px (atau selebar layar
+          telepon) kolom Status / Error kepotong permanen, padahal justru di
+          situ alasan order ditolak ditulis. */}
+      <TableScroll label={`${title} operations`}>
         <table className="w-full text-[12px]">
           <thead>
             <tr className="bg-bg-tertiary/30 text-text-muted">
@@ -436,7 +444,7 @@ function OpTable({ title, rows, kind }: { title: string; rows: OpRow[]; kind: 's
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
     </div>
   )
 }

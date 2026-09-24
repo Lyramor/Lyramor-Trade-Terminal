@@ -1,12 +1,18 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import type { ViewSpec } from '../tabs/types'
+import { filterScope } from '../tabs/types'
 import { api } from '../api'
 import { getIntlLocale } from '../lib/intl'
 import type { UTAConfig, BrokerPreset, AccountInfo, SubAccountRef, Position, BrokerHealthInfo, UTASnapshotSummary, EquityCurvePoint, OrderHistoryEntry, OrderHistoryStatus, TradeHistoryEntry } from '../api/types'
 import { useTradingConfig } from '../hooks/useTradingConfig'
 import { useAccountHealth } from '../hooks/useAccountHealth'
 import { PageHeader } from '../components/PageHeader'
+import { Container } from '../components/layout/Container'
+import { Section } from '../components/layout/Section'
+import { TableScroll } from '../components/layout/TableScroll'
+import { SegmentedControl, type SegmentedOption } from '../components/filters/SegmentedControl'
+import { useFilterEnum, useFilterParam } from '../hooks/useFilterParam'
 import { EmptyState } from '../components/StateViews'
 import { ReconnectButton } from '../components/ReconnectButton'
 import { Toggle } from '../components/Toggle'
@@ -39,7 +45,21 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
   // separate-wallet venues (Binance: spot / derivatives). `selectedSub`
   // undefined ⇒ the aggregate view across all wallets.
   const [subAccounts, setSubAccounts] = useState<SubAccountRef[]>([])
-  const [selectedSub, setSelectedSub] = useState<string | undefined>(undefined)
+  // Dompet yang sedang dilihat disimpan di URL, bukan di useState, supaya tidak
+  // hilang saat tab dibongkar di telepon. Nilainya SELALU divalidasi terhadap
+  // dompet yang benar-benar dimiliki UTA ini: kalau tidak dikenal (URL lama,
+  // atau UTA lain yang dompetnya beda), yang tampil adalah gabungan, bukan
+  // hasil fetch ke scope yang tidak ada.
+  // Ruang filternya diberi id UTA, bukan cuma nama view. Dompet dan tab Orders
+  // itu milik satu akun; dua halaman detail yang terbuka bersamaan tidak boleh
+  // saling menarik pilihan yang lain.
+  const scope = `${filterScope(spec)}.${id}`
+  const [walletParam, setWalletParam] = useFilterParam('wallet', '', { scope })
+  const selectedSub = subAccounts.some(s => s.id === walletParam) ? walletParam : undefined
+  const setSelectedSub = useCallback(
+    (next: string | undefined) => setWalletParam(next ?? ''),
+    [setWalletParam],
+  )
   const [snapshots, setSnapshots] = useState<UTASnapshotSummary[]>([])
   const [editing, setEditing] = useState(false)
   const [orderMode, setOrderMode] = useState<OrderEntryMode | null>(null)
@@ -63,7 +83,12 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
     api.trading.utaSubAccounts(id)
       .then(r => { if (!cancelled) setSubAccounts(r.subAccounts ?? []) })
       .catch(() => { if (!cancelled) setSubAccounts([]) })
-    setSelectedSub(undefined)  // reset to aggregate when switching UTAs
+    // Tidak ada lagi reset ke gabungan di sini. Dulu perlu karena pilihannya
+    // hidup di useState; sekarang pilihannya di URL dan divalidasi terhadap
+    // daftar dompet UTA ini, jadi id yang tidak dikenal sudah otomatis terbaca
+    // sebagai gabungan. Kalau resetnya dipertahankan, pilihan dompet justru
+    // terhapus tiap kali halamannya dipasang ulang, dan itu persis hal yang
+    // mau dihindari di telepon.
     return () => { cancelled = true }
   }, [id])
 
@@ -218,13 +243,19 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
           // secondary actions share btn-secondary-sm; Place Order is the
           // single filled-accent primary at the same size. No hand-rolled
           // paddings — mixed sizes were what made this row look drunk.
-          <div className="flex items-center gap-2">
+          //
+          // `flex-wrap`: PageHeader sudah membolehkan seluruh slot ini turun
+          // satu baris, tapi di 360px empat kendali tetap tidak muat sebaris
+          // walau sudah turun. Pemisahnya disembunyikan di layar sempit karena
+          // garis vertikal di antara dua baris yang terbungkus tidak memisahkan
+          // apa-apa lagi.
+          <div className="flex flex-wrap items-center gap-2">
             <Toggle
               size="sm"
               checked={!isDisabled}
               onChange={async (v) => { await tc.saveUTA({ ...uta, enabled: v }) }}
             />
-            <div className="w-px h-5 bg-border" />
+            <div className="hidden sm:block w-px h-5 bg-border" />
             <ReconnectButton accountId={uta.id} />
             <button onClick={() => setEditing(true)} className="btn-secondary-sm">
               Edit
@@ -240,8 +271,8 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
-        <div className="max-w-[1240px] mx-auto">
+      <div className="flex-1 overflow-y-auto py-5">
+        <Container size="wide">
           {dataError && (
             <div className="rounded-md border border-red/30 bg-red/5 px-3 py-2 text-[12px] text-red mb-4">
               Failed to load live data: {dataError}
@@ -291,10 +322,10 @@ export function UTADetailPage({ spec }: UTADetailPageProps) {
                 })}
               />
 
-              <OrdersArea utaId={id} openOrders={orders} />
+              <OrdersArea utaId={id} openOrders={orders} scope={scope} />
             </div>
           </div>
-        </div>
+        </Container>
       </div>
 
       {editing && (
@@ -332,8 +363,8 @@ function Shell({ title, children }: { title: string; children?: React.ReactNode 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader title={title} description={<Link to="/trading" className="text-text-muted hover:text-text">← Trading</Link>} />
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
-        <div className="max-w-[720px] mx-auto">{children}</div>
+      <div className="flex-1 overflow-y-auto py-5">
+        <Container size="prose">{children}</Container>
       </div>
     </div>
   )
@@ -354,7 +385,10 @@ function SubAccountSelector({ subAccounts, selected, onSelect }: {
       active ? 'bg-accent text-white' : 'text-text-muted hover:text-text hover:bg-surface-hover'
     }`
   return (
-    <div className="flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+    // Membungkus, bukan meluber: panelnya cuma 320px dan sebuah venue bisa
+    // punya lebih dari dua dompet. Pil yang terdorong keluar panel tidak bisa
+    // digeser kembali oleh siapa pun.
+    <div className="flex flex-wrap items-center gap-1 p-1 rounded-lg bg-surface border border-border">
       <button type="button" className={pill(selected === undefined)} onClick={() => onSelect(undefined)}>All</button>
       {subAccounts.map(s => (
         <button key={s.id} type="button" className={pill(selected === s.id)} onClick={() => onSelect(s.id)} title={`${s.kind} wallet`}>
@@ -512,20 +546,6 @@ function AccountRow({ label, value, sign }: {
   )
 }
 
-// ==================== Section helper ====================
-
-function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section>
-      <div className="flex items-center justify-between mb-2.5">
-        <h3 className="text-[13px] font-semibold text-text-muted uppercase tracking-wide">{title}</h3>
-        {action}
-      </div>
-      {children}
-    </section>
-  )
-}
-
 // ==================== Positions (grouped by asset class) ====================
 
 interface PositionGroup { class: AssetClass; positions: Position[] }
@@ -541,14 +561,22 @@ function PositionsSection({ positions, onCloseClick }: {
       if (!buckets.has(c)) buckets.set(c, [])
       buckets.get(c)!.push(p)
     }
-    return ASSET_CLASS_ORDER
-      .filter(c => buckets.has(c))
-      .map(c => ({ class: c, positions: buckets.get(c)! }))
+    // ASSET_CLASS_ORDER cuma mengatur URUTAN, bukan menentukan apa yang boleh
+    // muncul. Dulu barisnya `ASSET_CLASS_ORDER.filter(c => buckets.has(c))`,
+    // jadi kelas aset apa pun yang belum terdaftar di sana lenyap dari tabel
+    // tanpa sepatah kata pun, padahal posisinya ada di akun. Hari ini
+    // `secTypeToClass` memang selalu mengembalikan anggota AssetClass dan
+    // semuanya ada di daftar itu, tapi jaminannya kebetulan, bukan dipaksa:
+    // satu kelas baru ditambahkan tanpa ikut mengisi daftar urutan sudah cukup
+    // untuk menyembunyikan posisi orang. Jadi sisanya digambar di belakang.
+    const ordered = ASSET_CLASS_ORDER.filter(c => buckets.has(c))
+    const leftovers = [...buckets.keys()].filter(c => !ASSET_CLASS_ORDER.includes(c))
+    return [...ordered, ...leftovers].map(c => ({ class: c, positions: buckets.get(c)! }))
   }, [positions])
 
   if (positions.length === 0) {
     return (
-      <Section title="Positions (0)">
+      <Section pad="none" title="Positions (0)">
         <div className="border border-border rounded-lg px-4 py-3 text-[12px] text-text-muted">
           No open positions.
         </div>
@@ -559,8 +587,8 @@ function PositionsSection({ positions, onCloseClick }: {
   const cols = 7  // contract, side, qty, avg→mark, value, pnl, action
 
   return (
-    <Section title={`Positions (${positions.length})`}>
-      <div className="border border-border rounded-lg overflow-x-auto">
+    <Section pad="none" title={`Positions (${positions.length})`}>
+      <TableScroll label="Open positions">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-bg-secondary text-text-muted text-left">
@@ -610,7 +638,7 @@ function PositionsSection({ positions, onCloseClick }: {
             })}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
     </Section>
   )
 }
@@ -704,8 +732,25 @@ interface OpenOrderRow {
 
 type OrdersTab = 'open' | 'history' | 'trades'
 
-function OrdersArea({ utaId, openOrders }: { utaId: string; openOrders: unknown[] }) {
-  const [tab, setTab] = useState<OrdersTab>('open')
+const ORDERS_TABS: readonly OrdersTab[] = ['open', 'history', 'trades']
+
+/**
+ * Batas baris yang diambil untuk History dan Trades.
+ *
+ * Angkanya ikut disebut di layar saat benar-benar mentok. Tabel yang diam-diam
+ * berhenti di 50 baris bikin orang mengira segitulah semua yang pernah terjadi
+ * di akunnya, padahal yang lama cuma tidak ikut diambil.
+ */
+const HISTORY_LIMIT = 50
+
+function OrdersArea({ utaId, openOrders, scope }: {
+  utaId: string
+  openOrders: unknown[]
+  scope: string
+}) {
+  // Tab yang aktif ikut ke URL, jadi pindah tab di telepon (yang membongkar
+  // tab tidak aktif) tidak melempar orang kembali ke "Open".
+  const [tab, setTab] = useFilterEnum('orders', ORDERS_TABS, 'open', { scope })
   const [history, setHistory] = useState<OrderHistoryEntry[] | null>(null)
   const [trades, setTrades] = useState<TradeHistoryEntry[] | null>(null)
 
@@ -714,7 +759,7 @@ function OrdersArea({ utaId, openOrders }: { utaId: string; openOrders: unknown[
   useEffect(() => {
     if (tab !== 'history') return
     let cancelled = false
-    const load = () => api.trading.orderHistory(utaId, 50)
+    const load = () => api.trading.orderHistory(utaId, HISTORY_LIMIT)
       .then(r => { if (!cancelled) setHistory(r.orders) })
       .catch(() => {})
     load()
@@ -725,7 +770,7 @@ function OrdersArea({ utaId, openOrders }: { utaId: string; openOrders: unknown[
   useEffect(() => {
     if (tab !== 'trades') return
     let cancelled = false
-    const load = () => api.trading.tradeHistory(utaId, 50)
+    const load = () => api.trading.tradeHistory(utaId, HISTORY_LIMIT)
       .then(r => { if (!cancelled) setTrades(r.trades) })
       .catch(() => {})
     load()
@@ -733,37 +778,42 @@ function OrdersArea({ utaId, openOrders }: { utaId: string; openOrders: unknown[
     return () => { cancelled = true; clearInterval(t) }
   }, [tab, utaId])
 
-  const tabs: Array<{ id: OrdersTab; label: string }> = [
-    { id: 'open', label: `Open (${openOrders.length})` },
-    { id: 'history', label: 'History' },
-    { id: 'trades', label: 'Trades' },
+  // Ketiganya menyebut jumlahnya. Dulu cuma "Open" yang punya angka, jadi dua
+  // tab lain terbaca seperti tempat kosong sampai diklik.
+  const tabOptions: SegmentedOption<OrdersTab>[] = [
+    { value: 'open', label: `Open (${openOrders.length})` },
+    { value: 'history', label: history == null ? 'History' : `History (${history.length})` },
+    { value: 'trades', label: trades == null ? 'Trades' : `Trades (${trades.length})` },
   ]
 
   return (
     <Section
+      pad="none"
       title="Orders"
-      action={
-        <div className="flex gap-1">
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
-                tab === t.id
-                  ? 'bg-accent/15 text-accent font-medium'
-                  : 'text-text-muted hover:text-text hover:bg-bg-tertiary'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+      actions={
+        <SegmentedControl
+          options={tabOptions}
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Orders view"
+          size="sm"
+        />
       }
     >
       {tab === 'open' && <OpenOrdersTable orders={openOrders} />}
       {tab === 'history' && <OrderHistoryTable orders={history} />}
       {tab === 'trades' && <TradeHistoryTable trades={trades} />}
     </Section>
+  )
+}
+
+/** Tanda potong yang jujur, dipakai History dan Trades. */
+function TruncationNote({ shown, noun }: { shown: number; noun: string }) {
+  if (shown < HISTORY_LIMIT) return null
+  return (
+    <p className="mt-2 text-[11px] text-text-muted/70">
+      Showing the newest {HISTORY_LIMIT} {noun}. Older ones are not loaded.
+    </p>
   )
 }
 
@@ -777,7 +827,7 @@ function OpenOrdersTable({ orders }: { orders: unknown[] }) {
     )
   }
   return (
-    <div className="border border-border rounded-lg overflow-x-auto">
+    <TableScroll label="Open orders">
       <table className="w-full text-[13px]">
         <thead>
           <tr className="bg-bg-secondary text-text-muted text-left">
@@ -808,7 +858,7 @@ function OpenOrdersTable({ orders }: { orders: unknown[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
   )
 }
 
@@ -864,7 +914,8 @@ function OrderHistoryTable({ orders }: { orders: OrderHistoryEntry[] | null }) {
     )
   }
   return (
-    <div className="border border-border rounded-lg overflow-x-auto">
+    <>
+    <TableScroll label="Order history">
       <table className="w-full text-[13px]">
         <thead>
           <tr className="bg-bg-secondary text-text-muted text-left">
@@ -917,7 +968,9 @@ function OrderHistoryTable({ orders }: { orders: OrderHistoryEntry[] | null }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
+    <TruncationNote shown={orders.length} noun="orders" />
+    </>
   )
 }
 
@@ -939,7 +992,8 @@ function TradeHistoryTable({ trades }: { trades: TradeHistoryEntry[] | null }) {
     )
   }
   return (
-    <div className="border border-border rounded-lg overflow-x-auto">
+    <>
+    <TableScroll label="Trade history">
       <table className="w-full text-[13px]">
         <thead>
           <tr className="bg-bg-secondary text-text-muted text-left">
@@ -970,7 +1024,9 @@ function TradeHistoryTable({ trades }: { trades: TradeHistoryEntry[] | null }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
+    <TruncationNote shown={trades.length} noun="trades" />
+    </>
   )
 }
 
