@@ -26,15 +26,21 @@ export interface CreateWorkspaceDialogProps {
 
 export function CreateWorkspaceDialog(props: CreateWorkspaceDialogProps): ReactElement {
   const { t } = useTranslation()
+  // `w-full` di telepon: `w-[460px]` cuma dijepit `max-w-[95vw]` milik Dialog,
+  // dan 95vw masih lebih lebar dari ruang yang tersisa setelah padding
+  // backdrop, jadi tepinya kepotong.
   return (
-    <Dialog onClose={props.onClose} width="w-[460px]">
-      <div className="px-5 py-4 border-b border-border">
+    <Dialog onClose={props.onClose} width="w-full sm:w-[460px]">
+      <div className="shrink-0 px-5 py-4 border-b border-border">
         <h2 className="text-[15px] font-semibold text-text">{t('createWorkspace.dialogTitle')}</h2>
         <p className="text-[12px] text-text-muted mt-0.5">
           {t('createWorkspace.dialogSubtitle')}
         </p>
       </div>
-      <div className="px-5 py-4">
+      {/* Dialog memasang `max-h-[85dvh]` + `overflow-hidden`, jadi badan
+          formnya yang harus menggulir. Tanpa `min-h-0` di flex column, isinya
+          malah terpotong dan tombol Create tidak kejangkau. */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         <CreateWorkspaceForm
           templates={props.templates}
           presetTemplate={props.presetTemplate}

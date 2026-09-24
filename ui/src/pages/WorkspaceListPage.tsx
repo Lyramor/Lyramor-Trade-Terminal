@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
+import { Container } from '../components/layout/Container'
 import { useWorkspaces } from '../contexts/WorkspacesContext'
 import { useWorkspace } from '../tabs/store'
 import { OverviewCard } from '../components/workspace/OverviewCard'
@@ -145,8 +146,8 @@ export function WorkspaceListPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-5xl mx-auto px-6 py-6">
-        <div className="mb-6 flex items-baseline justify-between gap-4">
+      <Container size="default" className="py-6">
+        <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 className="text-[18px] font-semibold text-text">Workspaces Overview</h2>
           <span className="text-[12px] text-text-muted">
             {workspaces.length} workspace{workspaces.length === 1 ? '' : 's'}
@@ -187,7 +188,7 @@ export function WorkspaceListPage() {
             </section>
           ))}
         </div>
-      </div>
+      </Container>
     </div>
   )
 }

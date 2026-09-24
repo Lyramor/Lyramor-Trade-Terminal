@@ -289,7 +289,9 @@ function ChatWorkspaceRow(props: ChatWorkspaceRowProps): ReactElement {
         >
           <Plus size={13} strokeWidth={2.25} />
         </button>
-        <span className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Layar sentuh tidak punya hover: tanpa jalan keluar ini, aksi barisnya
+            tidak pernah muncul dan tidak ada cara lain memanggilnya. */}
+        <span className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100 transition-opacity">
           <button
             type="button"
             onClick={(e) => {

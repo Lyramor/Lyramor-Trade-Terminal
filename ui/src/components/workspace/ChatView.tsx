@@ -31,6 +31,7 @@ import {
   type ChatImage,
 } from './chat-protocol';
 import { MarkdownContent } from '../MarkdownContent';
+import { Container } from '../layout/Container';
 
 type Status = 'connecting' | 'connected' | 'reconnecting' | 'closed' | 'ended';
 
@@ -662,7 +663,10 @@ export function ChatView({ wsId, sessionId, label }: ChatViewProps): ReactElemen
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-bg">
-      <header className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-bg-secondary/40 shrink-0">
+      {/* Header dibiarkan membungkus: teks statusnya panjang ("Alice sedang
+          mengetik… (Esc untuk stop)") dan di telepon dia mengunyah habis
+          ruang label sesi kalau dipaksa sebaris. */}
+      <header className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-1.5 border-b border-border bg-bg-secondary/40 shrink-0">
         <span
           className={`w-2 h-2 rounded-full shrink-0 ${
             status === 'connected'
@@ -673,7 +677,9 @@ export function ChatView({ wsId, sessionId, label }: ChatViewProps): ReactElemen
           }`}
           aria-hidden="true"
         />
-        <span className="text-[12px] text-text-muted font-medium truncate">{label ?? 'Chat'}</span>
+        <span className="min-w-0 flex-1 basis-[8rem] text-[12px] text-text-muted font-medium truncate">
+          {label ?? 'Chat'}
+        </span>
         <span className="text-[11px] text-text-muted/50 ml-auto">
           {status === 'connecting' && 'menghubungkan…'}
           {status === 'reconnecting' && 'menyambungkan ulang…'}
@@ -683,143 +689,160 @@ export function ChatView({ wsId, sessionId, label }: ChatViewProps): ReactElemen
         </span>
       </header>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3">
-        {items.length === 0 && status === 'connected' && (
-          <div className="h-full flex flex-col items-center justify-center text-center text-text-muted/60 gap-2">
-            <p className="text-sm">{label ? `Mulai percakapan dengan ${label}.` : 'Mulai percakapan.'}</p>
-            <p className="text-[12px]">Ketik pesan di bawah, tekan Enter untuk kirim. Lampirkan gambar dengan tombol klip atau Ctrl+V.</p>
-          </div>
-        )}
-        {items.map((it) => (
-          <ChatBubble key={it.key} item={it} />
-        ))}
-        {busy && <TypingIndicator />}
-        {queue.map((q, i) => (
-          <PendingBubble key={`q${i}`} text={q.text} imageCount={q.images.length} />
-        ))}
-        {errorMsg && (
-          <div className="mx-auto max-w-2xl text-[12px] text-red bg-red/10 border border-red/30 rounded-lg px-3 py-2">
-            {errorMsg}
-          </div>
-        )}
+      {/* Transkrip dan komposer memakai Container dengan ukuran yang sama,
+          jadi kolomnya benar-benar sejajar. Sebelumnya transkrip melebar
+          sepenuh layar sementara komposer terkunci 768px di tengah, dan di
+          monitor lebar gelembungnya kelihatan melenceng dari kotak ketik. */}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+        <Container size="form" className="py-4 space-y-3">
+          {items.length === 0 && status === 'connected' && (
+            <div className="flex flex-col items-center justify-center text-center text-text-muted/60 gap-2 py-10">
+              <p className="text-sm">{label ? `Mulai percakapan dengan ${label}.` : 'Mulai percakapan.'}</p>
+              <p className="text-[12px]">Ketik pesan di bawah, tekan Enter untuk kirim. Lampirkan gambar dengan tombol klip atau Ctrl+V.</p>
+            </div>
+          )}
+          {items.map((it) => (
+            <ChatBubble key={it.key} item={it} />
+          ))}
+          {busy && <TypingIndicator />}
+          {queue.map((q, i) => (
+            <PendingBubble key={`q${i}`} text={q.text} imageCount={q.images.length} />
+          ))}
+          {errorMsg && (
+            <div className="text-[12px] text-red bg-red/10 border border-red/30 rounded-lg px-3 py-2 [overflow-wrap:anywhere]">
+              {errorMsg}
+            </div>
+          )}
+        </Container>
       </div>
 
-      <div className="shrink-0 border-t border-border bg-bg-secondary/30 px-3 py-3">
-        <div className="max-w-3xl mx-auto relative">
-          {paletteOpen && (
-            <div className="absolute bottom-full mb-2 left-0 right-0 rounded-xl border border-border bg-bg-secondary shadow-lg overflow-hidden z-10">
-              {paletteMatches.map((cmd, i) => (
-                <button
-                  key={cmd.name}
-                  type="button"
-                  onMouseDown={(e) => {
-                    // mousedown, not click: click fires after blur, which would
-                    // close the palette before the handler ran.
-                    e.preventDefault();
-                    applyPalette(i);
-                  }}
-                  onMouseEnter={() => setPaletteIdx(i)}
-                  className={`w-full text-left px-3 py-2 flex items-baseline gap-2 ${
-                    i === paletteIdx ? 'bg-bg-tertiary' : ''
-                  }`}
-                >
-                  <span className="text-[12px] font-mono text-accent shrink-0">{cmd.name}</span>
-                  <span className="text-[11px] text-text-muted truncate">{cmd.hint}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {attached.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2">
-              {attached.map((img, i) => (
-                <div key={i} className="relative group">
-                  <img
-                    src={`data:${img.mediaType};base64,${img.data}`}
-                    alt={`Lampiran ${i + 1}`}
-                    className="h-16 w-16 object-cover rounded-lg border border-border"
-                  />
+      <div className="shrink-0 border-t border-border bg-bg-secondary/30 py-3">
+        <Container size="form">
+          {/* `relative` duduk di dalam Container, bukan di Container-nya:
+              palette-nya dipatok `left-0 right-0`, dan kalau titik acuannya
+              Container dia jadi lebih lebar dari kotak ketik sebesar pagar
+              kiri-kanan halaman. */}
+          <div className="relative">
+            {paletteOpen && (
+              <div className="absolute bottom-full mb-2 left-0 right-0 rounded-xl border border-border bg-bg-secondary shadow-lg overflow-hidden z-10">
+                {paletteMatches.map((cmd, i) => (
                   <button
+                    key={cmd.name}
                     type="button"
-                    onClick={() => removeAttached(i)}
-                    aria-label={`Hapus lampiran ${i + 1}`}
-                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-bg-tertiary border border-border text-text-muted hover:text-red hover:border-red/60 flex items-center justify-center"
+                    onMouseDown={(e) => {
+                      // mousedown, not click: click fires after blur, which would
+                      // close the palette before the handler ran.
+                      e.preventDefault();
+                      applyPalette(i);
+                    }}
+                    onMouseEnter={() => setPaletteIdx(i)}
+                    className={`w-full text-left px-3 py-2 flex items-baseline gap-2 ${
+                      i === paletteIdx ? 'bg-bg-tertiary' : ''
+                    }`}
                   >
-                    <X size={11} strokeWidth={2.5} />
+                    <span className="text-[12px] font-mono text-accent shrink-0">{cmd.name}</span>
+                    {/* `truncate` tidak berbuat apa-apa tanpa `min-w-0` di flex item. */}
+                    <span className="min-w-0 text-[11px] text-text-muted truncate">{cmd.hint}</span>
                   </button>
-                </div>
-              ))}
-            </div>
-          )}
-          {attachError && <p className="mb-1.5 text-[11px] text-red">{attachError}</p>}
-          <div className="flex items-end gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              multiple
-              onChange={onPickFiles}
-              className="hidden"
-              tabIndex={-1}
-              aria-hidden="true"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={composerDisabled || attached.length >= MAX_IMAGES_PER_MESSAGE}
-              aria-label="Lampirkan gambar"
-              title="Lampirkan gambar (atau Ctrl+V tempel screenshot)"
-              className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-bg-tertiary border border-border text-text-muted hover:text-text hover:border-accent/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Paperclip size={16} strokeWidth={2} />
-            </button>
-            <textarea
-              ref={textareaRef}
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                const el = e.target;
-                el.style.height = 'auto';
-                el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-              }}
-              onKeyDown={onKeyDown}
-              onPaste={onPaste}
-              rows={1}
-              placeholder={
-                composerDisabled
-                  ? 'Sesi berakhir — mulai chat baru.'
-                  : busy
-                    ? 'Ketik pesan berikutnya… (akan diantre)'
-                    : 'Ketik pesan…  /  perintah  ·  Ctrl+V tempel screenshot'
-              }
-              disabled={composerDisabled}
-              className="flex-1 resize-none rounded-xl border border-border bg-bg px-3 py-2.5 text-[13px] text-text placeholder:text-text-muted/50 focus:outline-none focus:border-accent/60 disabled:opacity-50 leading-relaxed max-h-[180px]"
-            />
-            {busy ? (
-              <button
-                type="button"
-                onClick={interrupt}
-                aria-label="Hentikan"
-                title="Hentikan (Esc)"
-                className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-bg-tertiary border border-border text-text hover:border-red/60 hover:text-red transition-colors"
-              >
-                <Square size={14} strokeWidth={2.5} fill="currentColor" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={submit}
-                disabled={!canSubmit}
-                aria-label="Kirim pesan"
-                className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-accent text-white transition-opacity disabled:opacity-30 hover:opacity-90"
-              >
-                <ArrowUp size={18} strokeWidth={2.5} />
-              </button>
+                ))}
+              </div>
             )}
+            {attached.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {attached.map((img, i) => (
+                  <div key={i} className="relative group">
+                    <img
+                      src={`data:${img.mediaType};base64,${img.data}`}
+                      alt={`Lampiran ${i + 1}`}
+                      className="h-16 w-16 object-cover rounded-lg border border-border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeAttached(i)}
+                      aria-label={`Hapus lampiran ${i + 1}`}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-bg-tertiary border border-border text-text-muted hover:text-red hover:border-red/60 flex items-center justify-center"
+                    >
+                      <X size={11} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {attachError && <p className="mb-1.5 text-[11px] text-red">{attachError}</p>}
+            <div className="flex items-end gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                multiple
+                onChange={onPickFiles}
+                className="hidden"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={composerDisabled || attached.length >= MAX_IMAGES_PER_MESSAGE}
+                aria-label="Lampirkan gambar"
+                title="Lampirkan gambar (atau Ctrl+V tempel screenshot)"
+                className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-bg-tertiary border border-border text-text-muted hover:text-text hover:border-accent/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Paperclip size={16} strokeWidth={2} />
+              </button>
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  const el = e.target;
+                  el.style.height = 'auto';
+                  el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+                }}
+                onKeyDown={onKeyDown}
+                onPaste={onPaste}
+                rows={1}
+                placeholder={
+                  composerDisabled
+                    ? 'Sesi berakhir — mulai chat baru.'
+                    : busy
+                      ? 'Ketik pesan berikutnya… (akan diantre)'
+                      : 'Ketik pesan…  /  perintah  ·  Ctrl+V tempel screenshot'
+                }
+                disabled={composerDisabled}
+                // `min-w-0` bukan hiasan: textarea punya lebar bawaan sekitar 20
+                // kolom, dan `min-width: auto` bikin dia menolak menyusut di
+                // bawah itu. Di layar sempit yang terdorong keluar justru tombol
+                // kirimnya, jadi pesannya tidak bisa dikirim sama sekali.
+                className="min-w-0 flex-1 resize-none rounded-xl border border-border bg-bg px-3 py-2.5 text-[13px] text-text placeholder:text-text-muted/50 focus:outline-none focus:border-accent/60 disabled:opacity-50 leading-relaxed max-h-[180px]"
+              />
+              {busy ? (
+                <button
+                  type="button"
+                  onClick={interrupt}
+                  aria-label="Hentikan"
+                  title="Hentikan (Esc)"
+                  className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-bg-tertiary border border-border text-text hover:border-red/60 hover:text-red transition-colors"
+                >
+                  <Square size={14} strokeWidth={2.5} fill="currentColor" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={!canSubmit}
+                  aria-label="Kirim pesan"
+                  className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-accent text-white transition-opacity disabled:opacity-30 hover:opacity-90"
+                >
+                  <ArrowUp size={18} strokeWidth={2.5} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        <p className="max-w-3xl mx-auto mt-1.5 text-[10px] text-text-muted/40">
-          Enter kirim · Shift+Enter baris baru · ↑↓ riwayat · / perintah · Esc stop
-        </p>
+          <p className="mt-1.5 text-[10px] text-text-muted/40 [overflow-wrap:anywhere]">
+            Enter kirim · Shift+Enter baris baru · ↑↓ riwayat · / perintah · Esc stop
+          </p>
+        </Container>
       </div>
     </div>
   );
@@ -829,7 +852,9 @@ function ChatBubble({ item }: { item: RenderItem }): ReactElement | null {
   if (item.role === 'system') {
     return (
       <div className="text-center">
-        <span className="inline-block text-[11px] text-text-muted/70 bg-bg-tertiary/50 rounded-full px-2.5 py-0.5 whitespace-pre-wrap text-left max-w-2xl">
+        {/* `whitespace-pre-wrap` menjaga baris asli, tapi satu token panjang
+            tanpa spasi tetap tembus keluar chip kalau tidak dipaksa patah. */}
+        <span className="inline-block text-[11px] text-text-muted/70 bg-bg-tertiary/50 rounded-full px-2.5 py-0.5 whitespace-pre-wrap [overflow-wrap:anywhere] text-left max-w-full">
           {item.text}
         </span>
       </div>
@@ -837,7 +862,7 @@ function ChatBubble({ item }: { item: RenderItem }): ReactElement | null {
   }
   if (item.role === 'error') {
     return (
-      <div className="mx-auto max-w-2xl text-[12px] text-red bg-red/10 border border-red/30 rounded-lg px-3 py-2 whitespace-pre-wrap">
+      <div className="text-[12px] text-red bg-red/10 border border-red/30 rounded-lg px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere]">
         {item.text}
       </div>
     );
@@ -845,9 +870,9 @@ function ChatBubble({ item }: { item: RenderItem }): ReactElement | null {
   if (item.role === 'tool') {
     return (
       <div className="flex justify-start">
-        <div className="max-w-2xl inline-flex items-start gap-1.5 text-[11px] text-text-muted bg-bg-tertiary/60 border border-border/50 rounded-lg px-2.5 py-1.5 font-mono">
+        <div className="max-w-full inline-flex items-start gap-1.5 text-[11px] text-text-muted bg-bg-tertiary/60 border border-border/50 rounded-lg px-2.5 py-1.5 font-mono">
           <Wrench size={12} strokeWidth={2} className="shrink-0 mt-0.5" />
-          <span className="break-all">
+          <span className="min-w-0 break-all">
             <span className="text-text/80">{item.toolName}</span>
             {item.toolInput ? <span className="text-text-muted/70"> {item.toolInput}</span> : null}
           </span>
@@ -858,7 +883,11 @@ function ChatBubble({ item }: { item: RenderItem }): ReactElement | null {
   if (item.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-2xl rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed break-words bg-accent text-white rounded-br-md">
+        {/* Batas gelembung sekarang relatif: `42rem` selama ruangnya ada,
+            `88%` begitu layarnya lebih sempit dari itu. Dengan angka rem saja,
+            di telepon gelembung pengguna melar sepenuh kolom dan tidak lagi
+            terbaca sebagai gelembung. */}
+        <div className="max-w-[min(42rem,88%)] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed [overflow-wrap:anywhere] bg-accent text-white rounded-br-md">
           {item.images && item.images.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-1.5">
               {item.images.map((src, i) => (
@@ -883,7 +912,9 @@ function ChatBubble({ item }: { item: RenderItem }): ReactElement | null {
   // inside the bubble rather than breaking the layout.
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-3xl rounded-2xl px-4 py-3 bg-bg-secondary border border-border/60 text-text rounded-bl-md overflow-x-auto">
+      {/* `min-w-0` + `overflow-x-auto`: blok kode dan tabel lebar menggeser di
+          dalam gelembung, bukan melebarkan seluruh halaman. */}
+      <div className="w-full min-w-0 rounded-2xl px-4 py-3 bg-bg-secondary border border-border/60 text-text rounded-bl-md overflow-x-auto">
         <MarkdownContent text={item.text ?? ''} />
       </div>
     </div>
@@ -894,7 +925,7 @@ function ChatBubble({ item }: { item: RenderItem }): ReactElement | null {
 function PendingBubble({ text, imageCount }: { text: string; imageCount: number }): ReactElement {
   return (
     <div className="flex justify-end">
-      <div className="max-w-2xl rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed break-words bg-accent/40 text-white/80 rounded-br-md border border-dashed border-white/30">
+      <div className="max-w-[min(42rem,88%)] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed [overflow-wrap:anywhere] bg-accent/40 text-white/80 rounded-br-md border border-dashed border-white/30">
         {text ? <span className="whitespace-pre-wrap">{text}</span> : null}
         {imageCount > 0 && (
           <span className="block text-[11px] text-white/70">

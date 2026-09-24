@@ -9,6 +9,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+
+import { useFilterEnum } from '../../hooks/useFilterParam'
 import {
   getAgentConfig,
   listCredentials,
@@ -116,8 +118,15 @@ function testKey(form: FormState, agent: AgentId): string {
   ].join('|')
 }
 
+const TAB_IDS = ['claude', 'codex', 'opencode', 'pi'] as const
+
 export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
-  const [tab, setTab] = useState<Tab>('claude')
+  // Tab disimpan di URL, bukan `useState`. Di telepon TabHost membongkar tab
+  // yang tidak aktif, jadi modal yang ditinggal sebentar kembali ke Claude
+  // dan pengguna kehilangan tempatnya di tengah mengisi kredensial.
+  const [tab, setTab] = useFilterEnum<Tab>('tab', TAB_IDS, 'claude', {
+    scope: 'workspace-ai',
+  })
   const [credentials, setCredentials] = useState<SavedCredential[]>([])
   const [bundle, setBundle] = useState<AgentConfigBundle | null>(null)
   const [claudeForm, setClaudeForm] = useState<FormState>(EMPTY_FORM)
@@ -305,16 +314,21 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onMouseDown={handleBackdropMouseDown}
     >
+      {/* `dvh`, bukan `vh`. Di browser telepon `vh` dihitung dari viewport
+          waktu bilah alamat tersembunyi, jadi 85vh bisa lebih tinggi dari
+          layar yang benar-benar terlihat dan footer modal (tempat Test dan
+          Save) terdorong keluar tanpa ada yang bisa menggesernya. `dvh` ikut
+          menyusut bersama bilah alamat dan papan ketik. */}
       <div
-        className="bg-bg-secondary/90 backdrop-blur-xl border border-accent/20 rounded-2xl shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col"
+        className="bg-bg-secondary/90 backdrop-blur-xl border border-accent/20 rounded-2xl shadow-2xl w-full max-w-xl max-h-[calc(100dvh-2rem)] sm:max-h-[85dvh] flex flex-col overflow-hidden"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-[15px] font-semibold text-text">Workspace AI Provider</h2>
+        <div className="flex shrink-0 items-center justify-between gap-2 p-4 border-b border-border">
+          <h2 className="min-w-0 truncate text-[15px] font-semibold text-text">Workspace AI Provider</h2>
           <button onClick={onClose} className="text-text-muted hover:text-text transition-colors">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -323,12 +337,16 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-border bg-bg-secondary/50">
-          {(['claude', 'codex', 'opencode', 'pi'] as const).map((id) => (
+        {/* Empat label ("Claude Code" yang terpanjang) dengan padding tetap
+            sudah melewati 320px. Barisnya digeser mendatar, bukan dibungkus:
+            tab yang terbungkus jadi dua baris terbaca seperti dua kelompok
+            terpisah. */}
+        <div className="scrollbar-hide flex shrink-0 overflow-x-auto border-b border-border bg-bg-secondary/50">
+          {TAB_IDS.map((id) => (
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`flex-1 px-4 py-2.5 text-[13px] font-medium transition-colors ${
+              className={`flex-1 shrink-0 whitespace-nowrap px-3 sm:px-4 py-2.5 text-[13px] font-medium transition-colors ${
                 tab === id
                   ? 'text-accent border-b-2 border-accent -mb-px'
                   : 'text-text-muted hover:text-text'
@@ -340,7 +358,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
           {/* Quick pick — load a saved credential into the form */}
           <div className="rounded-lg border border-border bg-bg-secondary/30 p-3">
             <label className="block text-xs font-medium text-text-muted mb-2">
@@ -353,11 +371,11 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
               const compatible = credentials.filter((c) => pickAgentWire(c.wires, tab))
               return (
                 <>
-                  <div className="flex gap-2">
+                  <div className="flex min-w-0 gap-2">
                     <select
                       value={pickedCredential}
                       onChange={(e) => setPickedCredential(e.target.value)}
-                      className={inputClass + ' flex-1'}
+                      className={inputClass + ' min-w-0 flex-1'}
                       disabled={compatible.length === 0}
                     >
                       <option value="">
@@ -375,7 +393,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
                     <button
                       onClick={applyCredential}
                       disabled={!pickedCredential}
-                      className="px-3 py-2 rounded-lg bg-gradient-to-br from-accent to-purple text-white text-[13px] font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition-all"
+                      className="shrink-0 px-3 py-2 rounded-lg bg-gradient-to-br from-accent to-purple text-white text-[13px] font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition-all"
                     >
                       Load
                     </button>
@@ -523,11 +541,11 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
             </div>
           )}
           {offerSaveCred && (
-            <div className="rounded-md border border-accent/40 bg-accent/10 text-text text-[12px] px-3 py-2.5 flex items-center justify-between gap-3">
-              <span className="leading-snug">
+            <div className="rounded-md border border-accent/40 bg-accent/10 text-text text-[12px] px-3 py-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+              <span className="min-w-0 flex-1 basis-[14rem] leading-snug">
                 Save this provider to Alice so other workspaces can reuse it?
               </span>
-              <div className="flex gap-2 shrink-0">
+              <div className="ml-auto flex shrink-0 gap-2">
                 <button
                   onClick={() => setOfferSaveCred(false)}
                   disabled={savingCred}
@@ -597,8 +615,8 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-2 p-3 border-t border-border bg-bg-secondary/30">
-          <div className="flex gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 p-3 border-t border-border bg-bg-secondary/30">
+          <div className="flex min-w-0 gap-2">
             <button
               onClick={handleReset}
               disabled={saving}
@@ -607,7 +625,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
               Reset to global default
             </button>
           </div>
-          <div className="flex gap-2">
+          <div className="ml-auto flex gap-2">
             <button
               onClick={onClose}
               disabled={saving}

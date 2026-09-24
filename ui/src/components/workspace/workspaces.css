@@ -169,6 +169,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Kartunya boleh lebih tinggi dari frame kalau layarnya pendek, jadi
+     overlay ini yang menggulir. Tanpa padding, kartu yang pas-pasan
+     menempel ke bingkai dashed di belakangnya. */
+  padding: 16px;
+  overflow: auto;
   /* Subtle vignette pushes the eye to center, where the card lives. */
   background: radial-gradient(
     ellipse at center,
@@ -183,8 +188,13 @@
   flex-direction: column;
   align-items: stretch;
   gap: 14px;
-  padding: 24px 28px;
-  min-width: 320px;
+  padding: 24px clamp(16px, 5vw, 28px);
+  /* Maksud aslinya "kartunya antara 320 dan 420" — tapi `min-width: 320px`
+     itu lantai keras: di layar 320px kartunya sudah mepet tepi, dan di bawah
+     itu dia jebol keluar frame tanpa ada yang bisa menggesernya. `min()`
+     menjaga niatnya (lega selama ruangnya ada) sambil tetap mengalah waktu
+     layarnya memang lebih sempit dari itu. */
+  min-width: min(320px, 100%);
   max-width: 420px;
   background: color-mix(in srgb, var(--panel) 82%, transparent);
   backdrop-filter: blur(16px);
@@ -216,6 +226,9 @@
   font-size: 16px;
   font-weight: 600;
   color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .resume-cta-state {
@@ -243,6 +256,10 @@
   color: var(--fg);
   margin: 0;
   font-variant-numeric: tabular-nums;
+  /* Isinya sering path dan id panjang tanpa spasi. Tanpa ini, satu baris
+     saja sudah cukup untuk melebarkan kartunya melewati max-width. */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .resume-cta-meta dd.mono {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -317,6 +334,28 @@
  * 360px aside column so the terminal pane fills the whole width. */
 .workspace-view.has-no-side {
   grid-template-columns: minmax(0, 1fr);
+}
+
+/* Kolom samping 360px itu angka desktop. Di lebar menengah dia menyisakan
+   terminal yang terlalu sempit buat dipakai, jadi kolomnya ikut menyusut
+   dulu sebelum akhirnya menyerah dan pindah ke bawah.
+
+   Kenapa masih perlu padahal WorkspaceView sudah menyembunyikan panel di
+   bawah 768px: penyembunyian itu bergantung pref `autoHideMobile` yang bisa
+   dimatikan pengguna, dan celah 768–1024 memang tidak tertutup olehnya. */
+@media (max-width: 1100px) {
+  .workspace-view {
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 300px);
+  }
+}
+
+@media (max-width: 860px) {
+  .workspace-view:not(.has-no-side) {
+    grid-template-columns: minmax(0, 1fr);
+    /* Terminal tetap dapat porsi terbesar; panel file jadi laci bawah yang
+       masih bisa digulir sendiri. */
+    grid-template-rows: minmax(0, 1fr) minmax(120px, 38%);
+  }
 }
 
 .workspace-terminal {
@@ -413,7 +452,7 @@
   align-items: center;
   justify-content: center;
   gap: 14px;
-  padding: 32px 24px;
+  padding: clamp(16px, 4vw, 32px) clamp(12px, 4vw, 24px);
   overflow-y: auto;
 }
 .workspace-empty-heading {
@@ -459,12 +498,21 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
+  /* Nama sesi dibuat dari judul percakapan, jadi bisa sepanjang apa pun.
+     Dipotong di sini supaya tombol Continue di kanan tidak terdorong keluar
+     kartu di layar sempit. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .workspace-empty-card-state {
   font-size: 10px;
   color: var(--fg-dim);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .workspace-empty-card-btn {
   display: inline-flex;
@@ -849,7 +897,12 @@
 .terminal-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  /* Label sesi bisa panjang ("workspace · nama sesi"), dan meta di kanan
+     ikut tumbuh waktu sesi berakhir. Dibiarkan membungkus supaya keduanya
+     tetap kebaca, bukan saling mendorong keluar. */
+  flex-wrap: wrap;
+  column-gap: 10px;
+  row-gap: 2px;
   padding: 8px 12px;
   background: linear-gradient(180deg, var(--color-bg-tertiary), var(--color-bg-secondary));
   border-bottom: 1px solid var(--border);
@@ -863,11 +916,19 @@
   font-weight: 600;
   letter-spacing: 0.2px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .terminal-meta {
+  /* `margin-left: auto` cuma berlaku selama masih sebaris. Begitu headernya
+     membungkus, meta turun jadi baris sendiri dan rata kiri. */
   margin-left: auto;
+  min-width: 0;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .status-dot {
@@ -895,3 +956,26 @@
   background-color: transparent !important;
 }
 
+
+/* ── Penunjuk kasar (sentuh) ──────────────────────────────────────────────
+ *
+ * Baris panel di sini dirancang untuk mouse: tinggi efektifnya sekitar 20px,
+ * jauh di bawah lebar jari. Di layar sentuh itu artinya salah ketuk terus,
+ * dan di panel file salah ketuk berarti membuka berkas yang salah. Jaraknya
+ * dilonggarkan hanya untuk penunjuk kasar, jadi tampilan desktop tidak ikut
+ * berubah. Idiom yang sama dipakai SegmentedControl dan FilterSelect. */
+@media (pointer: coarse) {
+  .files-row,
+  .git-status-row,
+  .git-log-row {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+  .files-crumb {
+    padding: 6px 8px;
+  }
+  .panel-collapse {
+    width: 24px;
+    height: 24px;
+  }
+}

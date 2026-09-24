@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import { Container } from '../components/layout/Container'
 import { useWorkspaces } from '../contexts/WorkspacesContext'
 import { installHintFor } from '../components/workspace/agentInstall'
 import {
@@ -250,7 +251,7 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
   }
 
   return (
-    <div className="relative h-full w-full overflow-auto bg-bg flex flex-col items-center justify-center px-4 py-8 md:px-6 md:py-10">
+    <div className="relative h-full w-full overflow-auto bg-bg flex flex-col items-center justify-center py-8 md:py-10">
       {/* Ask-Alice backdrop — full-bleed, responsive-only layers (gradient wash
           + faint grid). The #302 mock's %-positioned circle / diagonal bars were
           dropped: they drift on portrait and read as pixel-placed art, not a
@@ -261,7 +262,7 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
         <div className="absolute inset-0 opacity-[0.06] [background-image:linear-gradient(to_right,var(--color-text)_1px,transparent_1px),linear-gradient(to_bottom,var(--color-text)_1px,transparent_1px)] [background-size:96px_96px]" />
       </div>
 
-      <div className="relative z-10 w-full max-w-2xl flex flex-col gap-5">
+      <Container size="prose" className="relative z-10 flex flex-col gap-5">
         <div className="text-center space-y-1.5">
           {targetWs ? (
             <>
@@ -307,10 +308,13 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
             placeholder={t('chatLanding.placeholder')}
             rows={3}
             autoFocus
-            className="w-full bg-transparent resize-none outline-none text-text placeholder:text-text-muted/50 text-[15px] px-2 py-1.5 min-h-[72px] max-h-[40vh]"
+            className="w-full bg-transparent resize-none outline-none text-text placeholder:text-text-muted/50 text-[15px] px-2 py-1.5 min-h-[72px] max-h-[40dvh]"
           />
-          <div className="flex items-center justify-between px-1 pt-1">
-            <div className="flex items-center gap-2">
+          {/* Baris kendali komposer: di telepon tiga chip kiri plus dua
+              tombol kanan tidak muat sebaris, jadi dibiarkan membungkus
+              daripada saling mendorong keluar kotak. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-1 pt-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {/* Workspace type (Chat). Static — quick-chat always targets the chat template. */}
               <span className="inline-flex items-center gap-1.5 text-[11px] text-text-muted bg-bg-tertiary px-2 py-1 rounded-md">
                 <MessageSquare className="w-3 h-3" />
@@ -423,7 +427,7 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="ml-auto flex items-center gap-1.5">
               <button
                 type="button"
                 disabled
@@ -528,7 +532,7 @@ export function ChatLandingPage({ spec }: { spec: { params: { targetWsId?: strin
             </button>
           ))}
         </div>
-      </div>
+      </Container>
     </div>
   )
 }

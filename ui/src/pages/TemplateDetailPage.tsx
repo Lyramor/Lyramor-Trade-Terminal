@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Container } from '../components/layout/Container'
 import { MarkdownContent } from '../components/MarkdownContent'
 import { useWorkspaces } from '../contexts/WorkspacesContext'
 import { useWorkspace } from '../tabs/store'
@@ -92,10 +93,13 @@ export function TemplateDetailPage({ spec }: Props) {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-6 py-6">
+      <Container size="form" className="py-6">
         {/* Header — identity + metadata band */}
-        <div className="mb-5 flex items-start justify-between gap-3">
-          <div className="min-w-0">
+        {/* Sisi aksi turun utuh ke baris bawah begitu tidak kebagian ruang,
+            alih-alih menyempitkan judul sampai jadi elipsis. Pola yang sama
+            dipakai kepala Section. */}
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-x-3 gap-y-3">
+          <div className="min-w-0 flex-1 basis-[16rem]">
             <div className="flex items-baseline gap-2.5 flex-wrap">
               <h2 className="text-[20px] font-semibold text-text truncate">{title}</h2>
               <span className="text-[12px] font-mono text-text-muted tabular-nums shrink-0">
@@ -158,7 +162,7 @@ export function TemplateDetailPage({ spec }: Props) {
             <MarkdownContent text={readmeBody} className="text-[13px] leading-relaxed" />
           )}
         </div>
-      </div>
+      </Container>
 
       {showCreate && (
         <CreateWorkspaceDialog

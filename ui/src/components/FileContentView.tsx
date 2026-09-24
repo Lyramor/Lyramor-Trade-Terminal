@@ -41,8 +41,12 @@ function DocBody({ path, content }: { path: string; content: string }): ReactEle
     return <MarkdownContent text={content} />
   }
   // Plain-text fallback (.txt, .log, no extension, code files…)
+  //
+  // `whitespace-pre-wrap` cuma membungkus di spasi. Baris log dan URL panjang
+  // tidak punya spasi sama sekali, jadi tanpa `overflow-wrap` satu baris saja
+  // sudah cukup untuk melebarkan seluruh halaman viewer.
   return (
-    <pre className="text-[12px] text-text whitespace-pre-wrap font-mono leading-relaxed">
+    <pre className="min-w-0 text-[12px] text-text whitespace-pre-wrap [overflow-wrap:anywhere] font-mono leading-relaxed">
       {content}
     </pre>
   )

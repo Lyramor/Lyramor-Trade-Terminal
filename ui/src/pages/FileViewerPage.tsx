@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { FileText } from 'lucide-react'
 
 import { FileContentView } from '../components/FileContentView'
+import { Container } from '../components/layout/Container'
 import { useWorkspaces } from '../contexts/WorkspacesContext'
 import { readWorkspaceFile, type ReadFileResult } from '../components/workspace/api'
 import type { ViewSpec } from '../tabs/types'
@@ -48,13 +49,13 @@ export function FileViewerPage({ spec }: Props) {
         <span className="ml-auto shrink-0 text-[11px] text-text-muted/60">{tag}</span>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="max-w-[820px] mx-auto px-6 py-6">
+        <Container size="form" className="py-6">
           {result === null ? (
             <div className="text-[12px] text-text-muted">Loading…</div>
           ) : (
             <FileContentView path={path} result={result} />
           )}
-        </div>
+        </Container>
       </div>
     </div>
   )

@@ -133,9 +133,14 @@ export function OverviewCard({
                 <span className="w-3 flex justify-center text-text-muted">
                   <AgentGlyph agent={s.agent} />
                 </span>
-                <span className="font-mono text-[11px] tabular-nums">{s.name}</span>
+                {/* Nama sesi ikut judul percakapan, jadi panjangnya tidak
+                    terbatas. Tanpa truncate, lencana status dan chevron
+                    terdorong keluar kartu. */}
+                <span className="min-w-0 truncate font-mono text-[11px] tabular-nums" title={s.name}>
+                  {s.name}
+                </span>
                 <span
-                  className={`text-[11px] ${
+                  className={`shrink-0 text-[11px] ${
                     s.state === 'running' ? 'text-green' : 'text-text-muted'
                   }`}
                 >

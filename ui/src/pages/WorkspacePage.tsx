@@ -83,9 +83,12 @@ export function WorkspacePage({ spec, visible }: Props) {
       {/* OpenAlice-side header bar above the launcher's WorkspaceView. The
        *  launcher component itself is byte-faithful; we add the AI-provider
        *  affordance here. */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-bg-secondary/30 shrink-0">
-        <span className="text-[12px] text-text-muted font-medium">{workspace.tag}</span>
-        <div className="flex items-center gap-1">
+      {/* Empat aksi plus tag workspace tidak muat sebaris di telepon. Tag
+          dibiarkan memotong diri sendiri, aksinya turun utuh ke baris bawah
+          daripada terdorong keluar layar. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 py-1.5 border-b border-border bg-bg-secondary/30 shrink-0">
+        <span className="min-w-0 truncate text-[12px] text-text-muted font-medium">{workspace.tag}</span>
+        <div className="ml-auto flex flex-wrap items-center gap-1">
           {/* `ctx.spawn` picks chat for chat-capable agents, so this is the
             * plain "new session" affordance — no separate "New chat" button
             * anymore, since chat IS the default now. */}

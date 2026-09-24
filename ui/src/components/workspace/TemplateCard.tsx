@@ -53,15 +53,17 @@ export function TemplateCard({ template: t, agents, onOpen }: Props) {
     >
       <div className="flex items-start gap-2.5">
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-2">
-            <h3 className="text-[14px] font-semibold text-text truncate" title={t.name}>
+          {/* Tanpa `shrink-0`, versi dan lencana ikut menyusut duluan dan
+              judulnya malah tidak pernah kena truncate. */}
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h3 className="min-w-0 truncate text-[14px] font-semibold text-text" title={t.name}>
               {title}
             </h3>
-            <span className="text-[11px] font-mono text-text-muted tabular-nums">
+            <span className="shrink-0 text-[11px] font-mono text-text-muted tabular-nums">
               v{t.version}
             </span>
             {t.community && (
-              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-border text-text-muted">
+              <span className="shrink-0 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-border text-text-muted">
                 {tr('templates.communityBadge')}
               </span>
             )}

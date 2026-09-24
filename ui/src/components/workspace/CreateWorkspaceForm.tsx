@@ -156,7 +156,7 @@ export function CreateWorkspaceForm(props: CreateWorkspaceFormProps): ReactEleme
 
       {create.error && <div className="text-[12px] text-red">{create.error}</div>}
 
-      <div className="flex items-center justify-end gap-2 pt-1">
+      <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
         {onCancel && (
           <button
             type="button"

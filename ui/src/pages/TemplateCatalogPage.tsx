@@ -16,6 +16,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Container } from '../components/layout/Container'
 import { useWorkspaces } from '../contexts/WorkspacesContext'
 import { useWorkspace } from '../tabs/store'
 import { TemplateCard } from '../components/workspace/TemplateCard'
@@ -71,7 +72,7 @@ export function TemplateCatalogPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-5xl mx-auto px-6 py-6">
+      <Container size="default" className="py-6">
         <div className="mb-6">
           <h2 className="text-[18px] font-semibold text-text">{t('templates.catalogTitle')}</h2>
           <p className="text-[12px] text-text-muted mt-1 max-w-2xl">
@@ -92,7 +93,7 @@ export function TemplateCatalogPage() {
             {renderGrid(community)}
           </div>
         )}
-      </div>
+      </Container>
     </div>
   )
 }

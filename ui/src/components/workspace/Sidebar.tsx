@@ -257,10 +257,24 @@ function AgentBadgeGlyph({ agentId }: { agentId: string }): ReactElement {
 
 /** Hover-revealed square action button used for the per-row controls. */
 function rowAction(danger = false): string {
-  return `shrink-0 w-5 h-5 rounded flex items-center justify-center text-text-muted/70 transition-colors ${
-    danger ? 'hover:text-red hover:bg-red/10' : 'hover:text-text hover:bg-bg-secondary'
-  }`;
+  // Sasaran 20px itu ukuran kursor, bukan ukuran jari, jadi khusus penunjuk
+  // kasar kotaknya dibesarkan. Tampilan desktop tidak ikut melar.
+  const touch = '[@media(pointer:coarse)]:w-7 [@media(pointer:coarse)]:h-7';
+  const tone = danger
+    ? 'hover:text-red hover:bg-red/10'
+    : 'hover:text-text hover:bg-bg-secondary';
+  return `shrink-0 w-5 h-5 rounded flex items-center justify-center text-text-muted/70 transition-colors ${touch} ${tone}`;
 }
+
+/**
+ * Aksi baris yang baru muncul saat disorot.
+ *
+ * Di layar sentuh tidak ada hover sama sekali, jadi tanpa jalan keluar untuk
+ * penunjuk kasar tombol configure dan delete tidak pernah kelihatan dan tidak
+ * ada cara lain menjangkaunya. Di sana tombolnya ditampilkan terus.
+ */
+const ROW_ACTION_REVEAL =
+  'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(pointer:coarse)]:opacity-100';
 
 export function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
   const w = props.workspace;
@@ -377,7 +391,7 @@ export function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
         {props.onConfigureWorkspace && (
           <button
             type="button"
-            className={`${rowAction()} opacity-0 group-hover:opacity-100 focus-visible:opacity-100`}
+            className={`${rowAction()} ${ROW_ACTION_REVEAL}`}
             title="configure AI provider for this workspace"
             onClick={() => props.onConfigureWorkspace?.(w.id)}
           >
@@ -386,7 +400,7 @@ export function WorkspaceRow(props: WorkspaceRowProps): ReactElement {
         )}
         <button
           type="button"
-          className={`${rowAction(true)} opacity-0 group-hover:opacity-100 focus-visible:opacity-100`}
+          className={`${rowAction(true)} ${ROW_ACTION_REVEAL}`}
           title="delete workspace"
           onClick={() => void props.onDelete(w.id)}
         >
@@ -496,7 +510,7 @@ function HeadlessTaskRow(props: {
       {openable && (
         <button
           type="button"
-          className={`${rowAction()} opacity-0 group-hover:opacity-100 focus-visible:opacity-100`}
+          className={`${rowAction()} ${ROW_ACTION_REVEAL}`}
           title="open this run as an interactive session"
           onClick={(e) => {
             e.stopPropagation();
@@ -583,7 +597,7 @@ export function SessionRow(props: SessionRowProps): ReactElement {
       )}
       <button
         type="button"
-        className={`${rowAction(true)} opacity-0 group-hover:opacity-100 focus-visible:opacity-100`}
+        className={`${rowAction(true)} ${ROW_ACTION_REVEAL}`}
         title="delete this session"
         aria-label="delete this session"
         onClick={(e) => {
