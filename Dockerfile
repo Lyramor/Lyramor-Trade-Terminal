@@ -106,13 +106,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # the other container, so bake it in for both.
     # Dulu baris ini cukup venv/bin/pip. Sejak Hermes 0.21 venv-nya dibuat uv,
     # dan uv tidak menaruh pip di dalamnya, jadi jalurnya hilang dan build mati
-    # dengan exit 127. uv sendiri belum ada di PATH pada tahap ini karena ENV
-    # PATH baru diset setelah RUN ini, makanya dipanggil lewat jalur pasangnya.
+    # dengan exit 127.
+    #
+    # uv-nya ada, tapi bukan di ~/.local/bin seperti pasangan uv pada umumnya:
+    # installer Hermes sengaja memasang uv miliknya sendiri ke $HERMES_HOME/bin
+    # supaya jalur update runtime-nya memakai biner yang sama. Di tahap build ini
+    # HOME masih /root, jadi jalurnya /root/.hermes/bin/uv. PATH belum memuatnya
+    # karena ENV PATH baru diset setelah RUN ini, makanya dipanggil jalur penuh.
     && HERMES_PY=/usr/local/lib/hermes-agent/venv/bin/python \
-    && { /usr/local/lib/hermes-agent/venv/bin/pip install --no-cache-dir "python-telegram-bot>=22" \
-         || /root/.local/bin/uv pip install --python "$HERMES_PY" --no-cache "python-telegram-bot>=22" \
-         || { "$HERMES_PY" -m ensurepip --upgrade \
-              && "$HERMES_PY" -m pip install --no-cache-dir "python-telegram-bot>=22"; }; } \
+    && { /root/.hermes/bin/uv pip install --python "$HERMES_PY" --no-cache "python-telegram-bot>=22" \
+         || /usr/local/lib/hermes-agent/venv/bin/pip install --no-cache-dir "python-telegram-bot>=22"; } \
+    && "$HERMES_PY" -c "import telegram; print('python-telegram-bot', telegram.__version__)" \
     && apt-get purge -y make g++ \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
