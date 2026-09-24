@@ -11,6 +11,27 @@
  * Phase 1 collapses the tree to always be `{ kind: 'leaf', group }` —
  * the recursive shape exists so phase 3 can introduce splits without
  * a data-model change.
+ *
+ * ---
+ *
+ * ## `params` itu identitas, bukan keadaan
+ *
+ * Isi `params` menjawab satu pertanyaan saja: layar mana yang dibuka. Simbol
+ * mana, akun mana, kategori setelan mana. Jangan pernah menaruh nilai filter
+ * di sini.
+ *
+ * Alasannya ada di `specEquals` di bawah: `openOrFocus` memakai perbandingan
+ * itu untuk menentukan sebuah tab sudah ada atau belum. Kalau nilai filter
+ * ikut masuk ke `params`, setiap kali pengguna mengganti filter, spec-nya jadi
+ * berbeda dan `openOrFocus` akan MEMBUKA TAB BARU. Mengganti rentang tanggal
+ * lima kali meninggalkan lima tab dengan judul yang sama persis.
+ *
+ * Nilai filter tinggal di search params URL, lewat `useFilterParam` di
+ * `src/hooks/useFilterParam.ts`. Itu juga yang membuatnya selamat waktu
+ * TabHost membongkar tab non-aktif di telepon. Banyak kind di bawah memakai
+ * `Record<string, never>` justru karena layarnya memang tidak punya identitas
+ * lain selain kind-nya, bukan karena ada tempat kosong yang menunggu diisi
+ * filter.
  */
 
 export type ViewSpec =
@@ -106,6 +127,34 @@ export function specEquals(a: ViewSpec, b: ViewSpec): boolean {
     if (aParams[k] !== bParams[k]) return false
   }
   return true
+}
+
+/**
+ * Nama ruang untuk filter sebuah view, dipakai sebagai `scope` di
+ * `useFilterParam`.
+ *
+ * Search params itu satu ruang global. Tanpa awalan, halaman Issues dan
+ * halaman Logs yang sama-sama memakai kunci `status` akan saling membaca
+ * nilai satu sama lain, dan pindah tab akan terlihat seperti filternya
+ * "bocor". Helper ini merakit awalannya dari kind plus satu parameter yang
+ * membedakan, jadi `?dev.logs.level=warn` dan `?dev.tools.level=warn` tidak
+ * pernah bertabrakan.
+ *
+ * Untuk halaman yang tidak menerima `spec` (registry membungkus sebagian
+ * sebagai `() => <Page />`), tulis saja nama ruangnya sebagai string tetap
+ * dengan bentuk yang sama.
+ *
+ * ```ts
+ * const [level, setLevel] = useFilterParam('level', '', { scope: filterScope(spec) })
+ * ```
+ */
+export function filterScope(spec: ViewSpec): string {
+  const params = spec.params as Record<string, unknown>
+  // Ambil satu parameter pembeda saja, bukan semuanya. Kalau seluruh params
+  // ikut masuk, nama ruangnya berubah setiap kali salah satunya berubah, dan
+  // filter yang sudah disetel jadi seperti hilang padahal cuma pindah ruang.
+  const discriminator = params.category ?? params.section ?? params.board ?? params.tab
+  return typeof discriminator === 'string' ? `${spec.kind}.${discriminator}` : spec.kind
 }
 
 /** Phase 1 helper: workspace tree is always a leaf, so this just unwraps it. */

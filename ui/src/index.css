@@ -54,6 +54,14 @@
 :root {
   color-scheme: light;
   --app-bg-wash: radial-gradient(circle at 50% 24%, rgba(79, 70, 229, 0.05), transparent 38rem);
+
+  /* Satu-satunya resep pagar kiri-kanan halaman. Dipakai `<Container>` lewat
+     `px-[var(--page-gutter)]`, dan oleh komponen lain yang butuh angka yang
+     sama (PageHeader). Sebelum ini ada enam resep berbeda tersebar di 28
+     tempat (px-3, px-4, px-6, px-4 md:px-6, px-4 md:px-8, p-3), jadi dua
+     halaman bersebelahan punya tepi yang tidak sejajar. clamp bikin satu
+     angka ini mengalir dari telepon ke monitor besar tanpa breakpoint. */
+  --page-gutter: clamp(16px, 4vw, 32px);
 }
 
 /* ---- Quant-Noir — dark (the Lyramor flagship) ----
@@ -131,10 +139,26 @@
     "Noto Sans CJK TC", sans-serif;
 }
 
+/* Seluruh kerangka aplikasi menggantung dari tinggi ini: ActivityBar, sidebar,
+   TabHost, sampai baris status paling bawah semuanya `h-full` dari sini.
+   `100%` saja bikin baris paling bawah ketutup di iOS Safari, karena di sana
+   `100%` mengikuti viewport besar (tinggi saat bar URL tersembunyi), bukan
+   yang benar-benar kelihatan. Jadi saat bar URL-nya muncul, bagian bawah
+   aplikasi tergeser ke belakangnya dan tidak bisa dijangkau sama sekali,
+   karena cangkangnya memang tidak menggulir.
+
+   `dvh` bergerak bersama bar itu, jadi tingginya selalu = yang terlihat.
+   Baris `100%` dibiarkan di atasnya sebagai cadangan untuk browser lama yang
+   belum kenal dvh; yang belakangan menang kalau didukung.
+
+   Catatan buat yang menyentuh ini nanti: dvh berubah saat bar URL menggeser,
+   jadi JANGAN menaruh animasi yang diikat posisi gulir di cangkang ini. Untuk
+   aplikasi berbingkai tetap seperti ini, ikut bergerak justru yang benar. */
 html,
 body,
 #root {
   height: 100%;
+  height: 100dvh;
 }
 
 body {
@@ -149,24 +173,48 @@ body {
 }
 
 /* ==================== Typography scale ====================
-   Five semantic sizes covering the entire app. New code should
-   prefer these over arbitrary `text-[Npx]` so size choices stay
-   consistent and a future global tweak is one edit.
-   - .text-display  hero numbers (UTA NLV, Portfolio total)
-   - .text-title    page H2 / dialog title
-   - .text-body     primary body text, table rows, buttons
-   - .text-caption  secondary descriptions, subtitles
-   - .text-micro    badges, timestamps, table metadata */
+   Enam ukuran semantik yang menutup seluruh aplikasi. Kode baru pakai ini,
+   jangan `text-[Npx]` lepasan, supaya pilihan ukuran tetap konsisten dan
+   penyetelan global cukup satu kali edit.
+
+   - .text-display  angka utama (NLV UTA, total Portfolio)
+   - .text-title    judul halaman / judul dialog  → PageHeader
+   - .text-subhead  judul kartu dan blok isi      → Card, Section
+   - .text-body     teks utama, baris tabel, tombol
+   - .text-caption  penjelas sekunder, subjudul
+   - .text-micro    lencana, cap waktu, keterangan kendali
+
+   Dua tingkat teratas sekarang mengalir pakai clamp, bukan melompat di satu
+   breakpoint. Yang dipakai bukan `Nvw` telanjang tapi `avw + b`, supaya
+   ukurannya tetap tumbuh pelan di layar lebar dan tidak pernah jatuh terlalu
+   kecil di layar sempit. Nilai puncaknya sengaja sama persis dengan yang
+   berlaku sekarang (36px dan 16px), jadi tampilan di desktop tidak berubah;
+   yang berubah cuma jalannya ke sana.
+
+   Empat tingkat sisanya tetap ukuran pasti. Ini aplikasi tabel padat, dan
+   baris angka yang ikut mengembang-mengempis mengikuti lebar jendela lebih
+   mengganggu daripada membantu. */
 
 .text-display {
-  @apply text-[28px] md:text-[36px] font-bold leading-tight tabular-nums;
+  /* Mulai 28px, sampai di 36px sekitar 690px. Sebelumnya lompat 28 → 36
+     persis di 768px. */
+  font-size: clamp(28px, 3.5vw + 12px, 36px);
+  @apply font-bold leading-tight tabular-nums;
   font-family: var(--font-display);
   letter-spacing: -0.02em;
 }
 .text-title {
-  @apply text-[16px] font-semibold leading-snug;
+  /* 15px di telepon, 16px begitu ada ruang. Satu piksel, tapi itu yang
+     menentukan judul terpotong atau tidak di 360px. */
+  font-size: clamp(15px, 0.35vw + 13.5px, 16px);
+  @apply font-semibold leading-snug;
   font-family: var(--font-display);
   letter-spacing: -0.01em;
+}
+.text-subhead {
+  /* Persis resep yang sudah dipakai kepala Card hari ini, diangkat jadi
+     nama supaya Section dan panel lain memakai yang sama. */
+  @apply text-[13px] font-medium leading-snug;
 }
 .text-body {
   @apply text-[13px] leading-relaxed;
@@ -176,6 +224,13 @@ body {
 }
 .text-micro {
   @apply text-[11px] tracking-wide;
+}
+
+/* Angka yang berubah terus (harga, PnL, saldo) pakai ini supaya lebar tiap
+   digit sama dan kolomnya tidak bergoyang tiap kali nilainya berdetak. */
+.text-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
 }
 
 /* ==================== Live-data pulse ====================

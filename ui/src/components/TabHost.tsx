@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
 import { useWorkspace } from '../tabs/store'
 import { type Tab } from '../tabs/types'
 import { getView } from '../tabs/registry'
+import { useIsDesktop } from '../live/use-is-desktop'
 import { TabStrip } from './TabStrip'
 import { EmptyEditor } from './EmptyEditor'
 
@@ -20,6 +20,35 @@ import { EmptyEditor } from './EmptyEditor'
  * care (ChatPage's catch-up scroll) react to becoming visible.
  *
  * Mobile (< md): single-tab mode. Only the active tab renders, no strip.
+ *
+ * ---
+ *
+ * ## Kenapa tab non-aktif tetap dibongkar di telepon
+ *
+ * Pilihan ini dipertahankan, bukan karena warisan, tapi karena alasannya
+ * masih berlaku. Satu tab di aplikasi ini bukan halaman ringan: ada koneksi
+ * SSE hidup, grafik lightweight-charts dengan buffer bar, terminal xterm
+ * dengan WebGL, dan tabel yang ikut polling tiap 60 detik. Di telepon kelas
+ * menengah, membiarkan lima tab seperti itu hidup berbarengan di latar
+ * belakang bukan cuma boros memori, tapi ikut memakan baterai dan kuota untuk
+ * layar yang sedang tidak dilihat siapa pun. Di desktop `display: none` murah,
+ * jadi di sana tetap disembunyikan saja.
+ *
+ * ## Tapi keadaan filter tidak boleh ikut mati
+ *
+ * Membongkar komponen berarti membunuh seluruh `useState` di dalamnya, dan
+ * dulu di situlah semua filter disimpan. Hasilnya keluhan yang berulang: di
+ * telepon, setiap kali pengguna pindah tab dan kembali, rentang tanggal dan
+ * pilihan sumber yang barusan disetel hilang semua.
+ *
+ * Jawabannya bukan mempertahankan komponennya, tapi memindahkan nilainya ke
+ * tempat yang tidak ikut dibongkar. Pakai `useFilterParam` dan kerabatnya di
+ * `src/hooks/useFilterParam.ts` untuk SETIAP keadaan filter yang pengguna
+ * pilih sendiri. Nilainya tinggal di search params, yang hidup di luar pohon
+ * komponen, jadi selamat melewati pembongkaran ini.
+ *
+ * Yang boleh tetap `useState` biasa: hal yang memang wajar hilang saat
+ * pindah, misal baris yang sedang di-hover, atau dialog yang sedang terbuka.
  */
 export function TabHost() {
   const tabIds = useWorkspace((state) =>
@@ -42,8 +71,9 @@ export function TabHost() {
             const tab = tabsMap[id]
             if (!tab) return null
             const isActive = id === activeTabId
-            // Mobile: only render the active tab to avoid blowing memory and
-            // because we don't even have a strip to switch tabs from.
+            // Telepon: cuma tab aktif yang dirender. Lihat catatan panjang di
+            // atas soal kenapa ini dipertahankan, dan kenapa filter karena itu
+            // wajib lewat useFilterParam.
             if (!isDesktop && !isActive) return null
             return <TabFrame key={id} tab={tab} visible={isActive} />
           })
@@ -71,19 +101,4 @@ function TabFrame({ tab, visible }: { tab: Tab; visible: boolean }) {
       <Component spec={tab.spec} visible={visible} />
     </div>
   )
-}
-
-/** Desktop = md+ in Tailwind = ≥768px. Phase 1 mobile is single-tab mode. */
-function useIsDesktop(): boolean {
-  const query = '(min-width: 768px)'
-  const [matches, setMatches] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia(query).matches : true,
-  )
-  useEffect(() => {
-    const mq = window.matchMedia(query)
-    const handler = () => setMatches(mq.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-  return matches
 }

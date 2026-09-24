@@ -20,11 +20,14 @@ export function SidebarSectionHeader({
   trailing?: ReactNode
 }) {
   return (
-    <div className="flex items-center gap-1.5 px-3 mt-2 mb-1 select-none">
-      <h3 className="flex-1 text-[10px] font-medium uppercase tracking-wider text-text-muted/60 truncate">
+    <div className="flex shrink-0 items-center gap-1.5 px-3 mt-2 mb-1 select-none">
+      <h3 className="min-w-0 flex-1 text-[10px] font-medium uppercase tracking-wider text-text-muted/60 truncate">
         {children}
       </h3>
-      {trailing}
+      {/* Slot kanan biasanya cuma angka jumlah. `shrink-0` supaya angkanya
+          tidak ikut dipotong waktu sidebar-nya dipersempit; yang mengalah
+          judulnya, karena judul masih bisa ditebak dari isinya. */}
+      {trailing && <div className="shrink-0">{trailing}</div>}
     </div>
   )
 }

@@ -19,16 +19,24 @@ interface SidebarProps {
  *
  * Width and resize are managed by the surrounding Group (react-resizable-panels)
  * at the App layout level. This component is a pure content wrapper.
+ *
+ * `aria-label` diambil dari judulnya supaya tiga landmark `aside` di satu
+ * halaman (rail, sidebar, panel) bisa dibedakan pembaca layar. Tanpa nama,
+ * ketiganya terbaca cuma sebagai "complementary".
  */
 export function Sidebar({ title, actions, children, leading }: SidebarProps) {
   return (
-    <aside className="flex h-full w-full flex-col bg-bg-secondary">
-      <div className="flex items-center justify-between px-4 h-10 shrink-0 gap-2 border-b border-border/60">
-        <div className="flex items-center gap-1.5 min-w-0">
+    <aside aria-label={title} className="flex h-full w-full min-w-0 flex-col bg-bg-secondary">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 px-4 border-b border-border/60">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {leading}
-          <h2 className="text-[13px] font-semibold text-text truncate">{title}</h2>
+          {/* Di sini `truncate` memang yang benar: lebar sidebar disetel
+              pengguna lewat panel yang bisa ditarik, jadi judul panjang harus
+              mengalah pada lebar yang dia pilih sendiri, bukan mendorong
+              tombol aksinya keluar. */}
+          <h2 className="text-[13px] font-semibold leading-snug text-text truncate">{title}</h2>
         </div>
-        {actions && <div className="flex items-center gap-0.5 shrink-0">{actions}</div>}
+        {actions && <div className="flex shrink-0 items-center gap-0.5">{actions}</div>}
       </div>
       <div className="flex-1 min-h-0 flex flex-col">{children}</div>
     </aside>

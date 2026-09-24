@@ -47,13 +47,20 @@ export function SidebarRow({ label, active = false, onClick, icon, trail, title,
       tabIndex={0}
       onClick={onClick}
       title={title}
+      // `aria-current` bukan `aria-pressed`: baris ini item navigasi, bukan
+      // tombol yang bisa ditekan-lepas. Pembaca layar mengumumkannya sebagai
+      // "current page", yang memang artinya di sini.
+      aria-current={active ? 'true' : undefined}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onClick()
         }
       }}
-      className={`group relative flex items-center gap-1.5 px-3 py-1.5 text-[13px] cursor-pointer transition-colors outline-none focus-visible:bg-bg-tertiary/70 ${
+      // Di telepon barisnya cuma setinggi ~28px, jauh di bawah lebar jari,
+      // dan daftar sidebar itu justru navigasi utama di sana. Tingginya
+      // ditambah khusus penunjuk kasar, jadi tampilan desktop tidak berubah.
+      className={`group relative flex items-center gap-1.5 px-3 py-1.5 [@media(pointer:coarse)]:py-2.5 text-[13px] cursor-pointer transition-colors outline-none focus-visible:bg-bg-tertiary/70 ${
         active
           ? 'bg-bg-tertiary text-text'
           : 'text-text hover:bg-bg-tertiary/50'
