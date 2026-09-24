@@ -38,7 +38,9 @@ export function AutomationPage({ spec }: AutomationPageProps) {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader title={SECTION_TITLE[section]} description={SECTION_DESCRIPTION[section]} />
-      <div className="flex-1 flex flex-col min-h-0 px-4 md:px-6 py-5">
+      {/* Pagar kiri-kanan diserahkan ke tiap seksi, karena lebarnya beda-beda:
+          API itu satu kolom bacaan, Runs itu tabel lebar, Flow itu kanvas. */}
+      <div className="flex flex-1 flex-col min-h-0 py-[clamp(18px,2.8vw,28px)]">
         <div className="flex-1 min-h-0">
           {section === 'api' ? (
             <AutomationApiSection />

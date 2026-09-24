@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { api } from '../api'
 import type { HeadlessOutput, HeadlessTaskRecord, HeadlessTaskStatus } from '../api/headless'
+import { Container } from '../components/layout/Container'
+import { TableScroll } from '../components/layout/TableScroll'
 import { useWorkspaces } from '../contexts/WorkspacesContext'
 import { formatRelativeTime } from '../lib/intl'
 
@@ -112,89 +114,102 @@ export function AutomationRunsSection() {
     return () => clearInterval(id)
   }, [load])
 
-  if (error) return <div className="text-sm text-red-400">Failed to load runs: {error}</div>
-  if (!tasks) return <div className="text-sm text-muted">Loading…</div>
+  if (error) {
+    return (
+      <Container size="wide" className="text-sm text-red-400">
+        Failed to load runs: {error}
+      </Container>
+    )
+  }
+  if (!tasks) {
+    return <Container size="wide" className="text-sm text-muted">Loading…</Container>
+  }
   if (tasks.length === 0) {
     return (
-      <div className="text-sm text-muted">
+      <Container size="wide" className="text-sm text-muted">
         No headless runs yet. Dispatch one with{' '}
         <code className="text-xs">POST /api/workspaces/:id/headless</code>.
-      </div>
+      </Container>
     )
   }
 
   return (
-    <div className="overflow-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-xs text-muted">
-            <th className="py-2 pr-4 font-medium">Status</th>
-            <th className="py-2 pr-4 font-medium">Agent</th>
-            <th className="py-2 pr-4 font-medium">Task</th>
-            <th className="py-2 pr-4 font-medium">Workspace</th>
-            <th className="py-2 pr-4 font-medium">Started</th>
-            <th className="py-2 pr-4 font-medium">Duration</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tasks.map((t) => {
-            const isExpanded = expanded.has(t.taskId)
-            const openable = t.status !== 'running' && !!t.agentSessionId
-            return (
-              <tr key={t.taskId} className="border-b border-border/50 align-top">
-                <td className="py-2 pr-4">
-                  <span
-                    className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_STYLE[t.status]}`}
-                  >
-                    {t.status}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap py-2 pr-4">{t.agent}</td>
-                <td className="max-w-xl py-2 pr-4">
-                  <button
-                    type="button"
-                    onClick={() => toggle(t.taskId)}
-                    className="block w-full cursor-pointer text-left"
-                    title={isExpanded ? 'Collapse' : 'Expand'}
-                  >
-                    <span className={isExpanded ? 'whitespace-pre-wrap break-words' : 'line-clamp-2'}>
-                      {t.prompt}
+    <Container size="wide">
+      {/* Enam kolom tidak akan pernah muat di telepon. Tanpa pembungkus ini
+          kolom Duration dan Started cuma kepotong, dan tidak ada yang bisa
+          menggesernya balik. */}
+      <TableScroll label="Headless runs" bordered={false}>
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-muted">
+              <th className="py-2 pr-4 font-medium">Status</th>
+              <th className="py-2 pr-4 font-medium">Agent</th>
+              <th className="py-2 pr-4 font-medium">Task</th>
+              <th className="py-2 pr-4 font-medium">Workspace</th>
+              <th className="py-2 pr-4 font-medium">Started</th>
+              <th className="py-2 pr-4 font-medium">Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tasks.map((t) => {
+              const isExpanded = expanded.has(t.taskId)
+              const openable = t.status !== 'running' && !!t.agentSessionId
+              return (
+                <tr key={t.taskId} className="border-b border-border/50 align-top">
+                  <td className="py-2 pr-4">
+                    <span
+                      className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_STYLE[t.status]}`}
+                    >
+                      {t.status}
                     </span>
-                    <span className="mt-0.5 block text-xs text-muted">
-                      {isExpanded ? '▴ collapse' : '▾ expand'}
-                    </span>
-                  </button>
-                  {t.error ? <div className="mt-0.5 text-xs text-red-400">{t.error}</div> : null}
-                  {isExpanded && (
-                    <>
-                      {openable && (
-                        <button
-                          type="button"
-                          className="mt-2 rounded border border-border px-2 py-0.5 text-xs text-emerald-400 hover:bg-emerald-500/10"
-                          title="resume this run's conversation in an interactive session"
-                          onClick={() =>
-                            void spawn(t.wsId, { resume: t.agentSessionId!, agent: t.agent })
-                          }
-                        >
-                          ▸ Open as session
-                        </button>
-                      )}
-                      <OutputLog task={t} />
-                    </>
-                  )}
-                </td>
-                <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs text-muted">
-                  {t.wsId.slice(0, 8)}
-                </td>
-                <td className="whitespace-nowrap py-2 pr-4 text-muted">
-                  {formatRelativeTime(t.startedAt)}
-                </td>
-                <td className="whitespace-nowrap py-2 pr-4 text-muted">{fmtDuration(t.durationMs)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4">{t.agent}</td>
+                  <td className="max-w-xl py-2 pr-4">
+                    <button
+                      type="button"
+                      onClick={() => toggle(t.taskId)}
+                      className="block w-full cursor-pointer text-left"
+                      title={isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      <span className={isExpanded ? 'whitespace-pre-wrap break-words' : 'line-clamp-2'}>
+                        {t.prompt}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {isExpanded ? '▴ collapse' : '▾ expand'}
+                      </span>
+                    </button>
+                    {t.error ? <div className="mt-0.5 text-xs text-red-400">{t.error}</div> : null}
+                    {isExpanded && (
+                      <>
+                        {openable && (
+                          <button
+                            type="button"
+                            className="mt-2 rounded border border-border px-2 py-0.5 text-xs text-emerald-400 hover:bg-emerald-500/10"
+                            title="resume this run's conversation in an interactive session"
+                            onClick={() =>
+                              void spawn(t.wsId, { resume: t.agentSessionId!, agent: t.agent })
+                            }
+                          >
+                            ▸ Open as session
+                          </button>
+                        )}
+                        <OutputLog task={t} />
+                      </>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 font-mono text-xs text-muted">
+                    {t.wsId.slice(0, 8)}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-muted">
+                    {formatRelativeTime(t.startedAt)}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-muted">{fmtDuration(t.durationMs)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </TableScroll>
+    </Container>
   )
 }

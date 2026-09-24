@@ -22,6 +22,7 @@ import { previewForEntry } from '../live/inbox-threads'
 import { useWikilinkHandler } from '../live/wikilink'
 import { useWorkspace } from '../tabs/store'
 import { CadencePill, PriorityIndicator, STATUS_META } from './IssuesBoard'
+import { Container } from './layout/Container'
 import { MarkdownContent } from './MarkdownContent'
 
 // Run-status pill tints — mirrors AutomationRunsSection's STATUS_STYLE so the
@@ -608,7 +609,7 @@ export function IssueDetail({ wsId, id }: { wsId: string; id: string }) {
 
   if (!data) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-5 md:px-6">
+      <Container size="default" className="py-[clamp(18px,2.8vw,28px)]">
         {backToBoard}
         {loading ? (
           <div className="text-sm text-muted">Loading…</div>
@@ -621,7 +622,7 @@ export function IssueDetail({ wsId, id }: { wsId: string; id: string }) {
             </p>
           </div>
         )}
-      </div>
+      </Container>
     )
   }
 
@@ -629,7 +630,7 @@ export function IssueDetail({ wsId, id }: { wsId: string; id: string }) {
   const inboxReports = data.inboxReports ?? []
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-5 md:px-6">
+    <Container size="default" className="py-[clamp(18px,2.8vw,28px)]">
       {backToBoard}
       <div className="flex flex-col gap-6 lg:flex-row">
         <main className="min-w-0 flex-1">
@@ -671,6 +672,6 @@ export function IssueDetail({ wsId, id }: { wsId: string; id: string }) {
           }}
         />
       )}
-    </div>
+    </Container>
   )
 }

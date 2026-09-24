@@ -13,6 +13,7 @@ import DOMPurify from 'dompurify'
 import 'highlight.js/styles/github-dark.min.css'
 
 import { useWikilinkHandler } from '../live/wikilink'
+import { cx } from './layout/Container'
 
 function escapeHtml(s: string): string {
   return s
@@ -136,8 +137,18 @@ export function MarkdownContent({ text, className, onWikilink }: MarkdownContent
   }, [handleClick])
 
   return (
-    <div ref={contentRef} className={className}>
-      <div className="markdown-content" dangerouslySetInnerHTML={{ __html: html }} />
+    // `min-w-0` + `overflow-wrap: anywhere`: markdown datang dari agen, jadi
+    // isinya bisa berupa URL atau hash sepanjang apa pun. Tanpa dua ini, satu
+    // kata panjang menentukan lebar minimum dan mendorong seluruh halaman
+    // melebar sampai ada gulir mendatar. Blok kode dan tabel tidak terpengaruh:
+    // `pre` pakai `white-space: pre` dan sel tabel pakai `nowrap`, jadi
+    // dua-duanya tetap menggeser isinya sendiri lewat `overflow-x: auto` yang
+    // sudah ada di `index.css`.
+    <div ref={contentRef} className={cx('min-w-0 max-w-full', className)}>
+      <div
+        className="markdown-content min-w-0 [overflow-wrap:anywhere]"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </div>
   )
 }

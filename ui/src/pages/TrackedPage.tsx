@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TrendingUp, Hash, FileText, ListChecks } from 'lucide-react'
+import { TrendingUp, Hash, FileText, ListChecks, Shapes } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
+import { Container } from '../components/layout/Container'
 import { PageLoading } from '../components/StateViews'
 import { api } from '../api'
 import { entitiesLive } from '../live/entities'
@@ -61,7 +62,9 @@ export function TrackedPage() {
         ) : entities.length === 0 ? (
           <EmptyState />
         ) : !selectedName ? (
-          <div className="px-6 py-8 text-text-muted text-sm">{t('tracked.selectFromSidebar')}</div>
+          <Container size="form" className="py-8 text-text-muted text-sm">
+            {t('tracked.selectFromSidebar')}
+          </Container>
         ) : detailLoading || !detail ? (
           <PageLoading />
         ) : (
@@ -75,7 +78,7 @@ export function TrackedPage() {
 function EmptyState() {
   const { t } = useTranslation()
   return (
-    <div className="px-6 py-16 text-center max-w-[520px] mx-auto">
+    <Container size="prose" className="py-[clamp(40px,7vw,64px)] text-center">
       <div className="text-[15px] text-text mb-2">{t('tracked.nothingTrackedYet')}</div>
       <p className="text-[13px] text-text-muted leading-relaxed">
         As an agent works, it registers the assets and topics worth following with the
@@ -84,20 +87,35 @@ function EmptyState() {
         <code className="mx-1 px-1 py-0.5 rounded bg-bg-tertiary text-[11px]">[[name]]</code>. They
         show up here as a running watchlist — each with the notes that reference it.
       </p>
-    </div>
+    </Container>
   )
+}
+
+/**
+ * Ikon per tipe. Tipe yang tidak dikenal TIDAK dipinjami ikon topik, karena
+ * itu yang bikin tipe baru terlihat seperti topik biasa. Sama seperti di
+ * TrackedSidebar.
+ */
+function iconForType(type: string) {
+  if (type === 'asset') return TrendingUp
+  if (type === 'topic') return Hash
+  return Shapes
 }
 
 function Detail({ detail }: { detail: EntityDetail }) {
   const { t } = useTranslation()
   const { entity, backlinks } = detail
-  const Icon = entity.type === 'asset' ? TrendingUp : Hash
+  const Icon = iconForType(entity.type)
   return (
-    <div className="max-w-[820px] mx-auto py-6 px-4 md:px-8">
-      <div className="flex items-center gap-2.5 mb-2">
+    <Container size="form" className="py-[clamp(18px,2.8vw,28px)]">
+      {/* Dibungkus: nama entitas bisa panjang, dan memaksa judul + lencana
+          tipe tetap sebaris bikin salah satunya kepotong di layar sempit. */}
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mb-2">
         <Icon size={20} strokeWidth={1.75} className="shrink-0 text-text-muted" aria-hidden />
-        <h2 className="text-[20px] font-semibold font-mono text-text">{entity.name}</h2>
-        <span className="text-[11px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted uppercase tracking-wide">
+        <h2 className="min-w-0 text-[20px] font-semibold font-mono text-text [overflow-wrap:anywhere]">
+          {entity.name}
+        </h2>
+        <span className="shrink-0 text-[11px] px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted uppercase tracking-wide">
           {entity.type}
         </span>
       </div>
@@ -117,7 +135,7 @@ function Detail({ detail }: { detail: EntityDetail }) {
           ))}
         </div>
       )}
-    </div>
+    </Container>
   )
 }
 

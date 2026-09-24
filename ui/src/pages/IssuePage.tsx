@@ -1,5 +1,7 @@
 import { PageHeader } from '../components/PageHeader'
 import { IssuesBoard } from '../components/IssuesBoard'
+import { Container } from '../components/layout/Container'
+import { Section } from '../components/layout/Section'
 
 /**
  * Issues — the global, Linear-style board aggregating every workspace's issues
@@ -15,8 +17,12 @@ export function IssuePage() {
         title="Issues"
         description="Work tracked across every workspace — what each agent is doing, and what's scheduled to run."
       />
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-5">
-        <IssuesBoard />
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <Container size="wide">
+          <Section ariaLabel="Issue board">
+            <IssuesBoard />
+          </Section>
+        </Container>
       </div>
     </div>
   )

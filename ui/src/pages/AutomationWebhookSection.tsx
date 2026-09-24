@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type TopologyResponse, type EventLogEntry } from '../api'
 import { PageLoading, EmptyState } from '../components/StateViews'
+import { Container } from '../components/layout/Container'
 
 // ==================== Per-type docs ====================
 //
@@ -236,13 +237,18 @@ function EventTypeCard({ name, description, doc, origin }: {
         <div className="text-[11px] uppercase tracking-wide text-text-muted mb-1.5">Payload</div>
         <div className="rounded-md border border-border/60 divide-y divide-border/60">
           {doc.fields.map((f) => (
-            <div key={f.name} className="flex items-baseline gap-3 px-3 py-2">
-              <div className="font-mono text-xs text-text w-36 shrink-0">
+            // Dibungkus: nama (144px) + tipe (64px) menyisakan ruang yang tidak
+            // cukup untuk penjelasan di layar telepon, jadi penjelasannya turun
+            // ke baris sendiri alih-alih dipadatkan jadi satu huruf per baris.
+            <div key={f.name} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2">
+              <div className="font-mono text-xs text-text w-36 shrink-0 [overflow-wrap:anywhere]">
                 {f.name}
                 {f.required ? <span className="text-red ml-1">*</span> : null}
               </div>
               <div className="font-mono text-[11px] text-text-muted w-16 shrink-0">{f.type}</div>
-              <div className="text-[12px] text-text-muted leading-snug">{f.description}</div>
+              <div className="min-w-0 flex-1 basis-[12rem] text-[12px] text-text-muted leading-snug">
+                {f.description}
+              </div>
             </div>
           ))}
         </div>
@@ -366,7 +372,11 @@ export function AutomationWebhookSection() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[880px] mx-auto space-y-5">
+      {/* Pagarnya dipasang di sini, bukan di AutomationPage: tiap seksi
+          Automation punya lebar sendiri, jadi halamannya tidak lagi memasang
+          padding untuk semuanya. (Dulu di sini `bleed` karena halamannya yang
+          memasang pagar.) */}
+      <Container size="form" className="space-y-5">
         <div className="rounded-lg border border-border/50 bg-bg-secondary/50 px-4 py-3">
           <p className="text-[13px] text-text-muted leading-relaxed">
             Trigger Alice from outside the process. Any HTTP client — TradingView alert webhook, a server
@@ -408,7 +418,7 @@ export function AutomationWebhookSection() {
         {externalTypes.some((t) => t.name === 'task.requested') && (
           <TryItForm />
         )}
-      </div>
+      </Container>
     </div>
   )
 }

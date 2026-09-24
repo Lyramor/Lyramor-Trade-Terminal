@@ -10,6 +10,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { api, type TopologyResponse, type EventLogEntry } from '../api'
 import { useSSE } from '../hooks/useSSE'
+import { Container } from '../components/layout/Container'
 import { PageLoading, EmptyState } from '../components/StateViews'
 
 // ==================== Layout ====================
@@ -275,7 +276,9 @@ export function AutomationFlowSection() {
   if (!topology) return <PageLoading />
 
   return (
-    <div className="flex flex-col gap-3 h-full">
+    // `full`: kanvas grafnya memang mau selebar mungkin, yang diambil dari
+    // Container cuma pagar kiri-kanannya.
+    <Container size="full" className="flex h-full flex-col gap-3">
       <div className="rounded-lg border border-border/50 bg-bg-secondary/50 px-4 py-3">
         <p className="text-[13px] text-text-muted leading-relaxed">
           Alice's async lifecycle as a graph. Four columns left-to-right: producers (pure event sources),
@@ -304,6 +307,6 @@ export function AutomationFlowSection() {
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>
-    </div>
+    </Container>
   )
 }

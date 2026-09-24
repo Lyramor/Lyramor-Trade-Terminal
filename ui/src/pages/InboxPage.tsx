@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { formatRelativeTime, getIntlLocale } from '../lib/intl'
 import { ArrowRight, Bot, ChevronRight, ListChecks, MessageSquare, Terminal, Trash2 } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
+import { Container } from '../components/layout/Container'
 import { MarkdownContent } from '../components/MarkdownContent'
 import { FileContentView } from '../components/FileContentView'
 import { api } from '../api'
@@ -96,13 +97,15 @@ export function InboxPage({ visible }: InboxPageProps) {
       />
       <div className="flex-1 overflow-y-auto min-h-0">
         {loading && entries.length === 0 ? (
-          <div className="px-6 py-8 text-text-muted text-sm">{t('common.loading')}</div>
+          <Container size="default" className="py-8 text-text-muted text-sm">
+            {t('common.loading')}
+          </Container>
         ) : entries.length === 0 ? (
           <EmptyState />
         ) : !selected ? (
-          <div className="px-6 py-8 text-text-muted text-sm">
+          <Container size="default" className="py-8 text-text-muted text-sm">
             {t('inbox.selectFromSidebar')}
-          </div>
+          </Container>
         ) : (
           <Detail
             key={selected.id}
@@ -118,7 +121,7 @@ export function InboxPage({ visible }: InboxPageProps) {
 function EmptyState() {
   const { t } = useTranslation()
   return (
-    <div className="px-6 py-16 text-center max-w-[520px] mx-auto">
+    <Container size="prose" className="py-[clamp(40px,7vw,64px)] text-center">
       <div className="text-[15px] text-text mb-2">{t('inbox.noMessages')}</div>
       <p className="text-[13px] text-text-muted leading-relaxed">
         Workspaces push updates here as they work — finished analysis,
@@ -127,7 +130,7 @@ function EmptyState() {
         <code className="mx-1 px-1 py-0.5 rounded bg-bg-tertiary text-[11px]">inbox_push</code>
         tool from inside its workspace. Nothing to read yet.
       </p>
-    </div>
+    </Container>
   )
 }
 
@@ -195,7 +198,7 @@ function Detail({ entry, onDelete }: { entry: InboxEntry; onDelete: () => void }
   }
 
   return (
-    <div className="max-w-[1040px] mx-auto py-6 px-4 md:px-8">
+    <Container size="default" className="py-[clamp(18px,2.8vw,28px)]">
       {/* Header: workspace label · timestamp · delete. */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <span
@@ -307,10 +310,10 @@ function Detail({ entry, onDelete }: { entry: InboxEntry; onDelete: () => void }
         )}
       </div>
 
-      <div className="mt-4 text-[11px] text-text-muted/40 font-mono">
+      <div className="mt-4 text-[11px] text-text-muted/40 font-mono [overflow-wrap:anywhere]">
         workspace: {entry.workspaceId}
       </div>
-    </div>
+    </Container>
   )
 }
 

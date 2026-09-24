@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo } from 'react'
 import {
   CheckCircle2,
   ChevronDown,
@@ -15,8 +15,12 @@ import type { LucideIcon } from 'lucide-react'
 
 import type { IssueListItem, IssuePriority, IssueStatus, IssueWorkspace } from '../api/issues'
 import type { ScheduleWhen } from '../api/schedule'
+import { useFilterParam } from '../hooks/useFilterParam'
 import { useIssues } from '../hooks/useIssues'
 import { useWorkspace } from '../tabs/store'
+
+/** Nama ruang filter di URL. Lihat `useFilterParam` soal kenapa harus diisi. */
+const ISSUES_SCOPE = 'issues'
 
 // ==================== Cadence pill (lifted from AutomationSchedulesSection) ====================
 
@@ -137,7 +141,10 @@ function IssueRow({ wsId, wsTag, issue, dupOthers, onOpen }: BoardRow & { onOpen
         type="button"
         onClick={onOpen}
         title={`Open ${issue.id}`}
-        className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-bg-tertiary/40 ${
+        // Dibungkus: satu baris issue bisa membawa lencana dup, pil cadence,
+        // assignee, dan tag workspace sekaligus. Di 360px semuanya `shrink-0`,
+        // jadi judulnya yang habis duluan sampai tinggal satu dua huruf.
+        className={`flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-left transition-colors hover:bg-bg-tertiary/40 ${
           terminal ? 'opacity-60' : ''
         }`}
       >
@@ -148,7 +155,10 @@ function IssueRow({ wsId, wsTag, issue, dupOthers, onOpen }: BoardRow & { onOpen
         >
           {issue.id}
         </span>
-        <span title={issue.title} className="min-w-0 flex-1 truncate text-[13px] text-text">
+        <span
+          title={issue.title}
+          className="min-w-0 flex-1 basis-[12rem] truncate text-[13px] text-text"
+        >
           {issue.title}
         </span>
         {issue.nameCollision && (
@@ -206,15 +216,24 @@ function StatusGroup({
         <span className="text-xs text-muted">{rows.length}</span>
       </button>
       {!collapsed && (
-        <ul className="divide-y divide-border/60 border-t border-border">
-          {rows.map((row) => (
-            <IssueRow
-              key={`${row.wsId}:${row.issue.id}`}
-              {...row}
-              onOpen={() => onOpenRow(row)}
-            />
-          ))}
-        </ul>
+        rows.length === 0 ? (
+          // Kolom kosong tetap digambar. Menyembunyikannya bikin "tidak ada
+          // issue di status ini" tidak bisa dibedakan dari "status ini memang
+          // tidak ada", dan yang kedua itu kabar yang jauh lebih besar.
+          <p className="border-t border-border px-4 py-3 text-xs text-muted/70">
+            No issues with this status.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border/60 border-t border-border">
+            {rows.map((row) => (
+              <IssueRow
+                key={`${row.wsId}:${row.issue.id}`}
+                {...row}
+                onOpen={() => onOpenRow(row)}
+              />
+            ))}
+          </ul>
+        )
       )}
     </div>
   )
@@ -253,18 +272,28 @@ function InvalidWorkspaces({ workspaces }: { workspaces: IssueWorkspace[] }) {
 export function IssuesBoard() {
   const { data, error, loading } = useIssues()
   const openOrFocus = useWorkspace((s) => s.openOrFocus)
-  const [collapsed, setCollapsed] = useState<Set<IssueStatus>>(new Set())
+  // Kolom yang dilipat disimpan di URL, bukan `useState`. TabHost membongkar
+  // tab yang tidak aktif di bawah 768px, jadi di telepon lipatan yang barusan
+  // diatur hilang setiap kali pengguna pindah tab dan kembali.
+  const [collapsedRaw, setCollapsedRaw] = useFilterParam('collapsed', '', { scope: ISSUES_SCOPE })
+  const collapsed = useMemo(() => {
+    const allowed = new Set<string>(STATUS_ORDER)
+    return new Set(
+      collapsedRaw.split(',').filter((value): value is IssueStatus => allowed.has(value)),
+    )
+  }, [collapsedRaw])
 
   const openRow = (row: BoardRow) =>
     openOrFocus({ kind: 'issue-detail', params: { wsId: row.wsId, id: row.issue.id } })
 
-  const toggle = (status: IssueStatus) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev)
-      if (next.has(status)) next.delete(status)
-      else next.add(status)
-      return next
-    })
+  const toggle = (status: IssueStatus) => {
+    const next = new Set(collapsed)
+    if (next.has(status)) next.delete(status)
+    else next.add(status)
+    // Ditulis mengikuti STATUS_ORDER supaya nilai di URL stabil, tidak
+    // berubah-ubah cuma karena urutan klik pengguna berbeda.
+    setCollapsedRaw(STATUS_ORDER.filter((candidate) => next.has(candidate)).join(','))
+  }
 
   // Keep showing any snapshot we have (incl. the warm cache) rather than
   // flipping to a loading/error screen on a transient refresh failure.
@@ -279,7 +308,7 @@ export function IssuesBoard() {
   const invalid = workspaces.filter((w) => w.status === 'invalid')
 
   // Flatten every ok workspace's issues, tagged with the workspace, then
-  // bucket by status in Linear's order. Empty buckets are hidden.
+  // bucket by status in Linear's order. Empty buckets stay visible.
   const okWorkspaces = workspaces.filter((w) => w.status === 'ok')
 
   // For each name, the set of workspaces that claim it — so a colliding row's
@@ -308,10 +337,13 @@ export function IssuesBoard() {
     })),
   )
 
+  // Setiap status punya kolomnya sendiri, termasuk yang kosong. Dulu ada
+  // `.filter((g) => g.rows.length > 0)` di sini, dan itu yang bikin kolom
+  // kosong lenyap tanpa jejak.
   const groups = STATUS_ORDER.map((status) => ({
     status,
     rows: rows.filter((r) => r.issue.status === status),
-  })).filter((g) => g.rows.length > 0)
+  }))
 
   const staleBanner = error ? (
     <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-400">
@@ -319,7 +351,7 @@ export function IssuesBoard() {
     </div>
   ) : null
 
-  if (groups.length === 0 && invalid.length === 0) {
+  if (rows.length === 0 && invalid.length === 0) {
     return (
       <div className="space-y-3">
         {staleBanner}

@@ -1,19 +1,52 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatRelativeTime } from '../lib/intl'
 import { api, type NewsArticle } from '../api'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/StateViews'
+import { Container } from '../components/layout/Container'
+import { Toolbar, ToolbarGroup } from '../components/layout/Toolbar'
+import { FilterSelect, type FilterOption } from '../components/filters/FilterSelect'
+import { useFilterEnum, useFilterParam } from '../hooks/useFilterParam'
 
 // ==================== Helpers ====================
 
+/** Nama ruang filter di URL. Lihat `useFilterParam` soal kenapa harus diisi. */
+const NEWS_SCOPE = 'news'
 
-const LOOKBACK_OPTIONS = [
-  { value: '1h', labelKey: 'news.lookback1h' },
-  { value: '12h', labelKey: 'news.lookback12h' },
-  { value: '24h', labelKey: 'news.lookback24h' },
-  { value: '7d', labelKey: 'news.lookback7d' },
-] as const
+const LOOKBACK_VALUES = ['1h', '12h', '24h', '7d'] as const
+type Lookback = (typeof LOOKBACK_VALUES)[number]
+
+const LOOKBACK_LABEL_KEYS = {
+  '1h': 'news.lookback1h',
+  '12h': 'news.lookback12h',
+  '24h': 'news.lookback24h',
+  '7d': 'news.lookback7d',
+} as const
+
+/** Rentang terlebar yang ditawarkan sebagai jalan keluar saat hasilnya kosong. */
+const WIDEST_LOOKBACK: Lookback = '7d'
+
+const DEFAULT_LOOKBACK: Lookback = '24h'
+
+const FETCH_LIMIT = 200
+
+/**
+ * Waktu artikel dalam milidetik. Tanggal yang tidak terbaca didorong ke paling
+ * bawah, bukan jadi NaN yang bikin hasil `sort` tidak bisa ditebak.
+ */
+function articleTime(article: NewsArticle): number {
+  const ms = Date.parse(article.time)
+  return Number.isNaN(ms) ? 0 : ms
+}
+
+function collectSources(items: readonly NewsArticle[]): string[] {
+  const seen = new Set<string>()
+  for (const item of items) {
+    if (item.source) seen.add(item.source)
+  }
+  return [...seen].sort()
+}
 
 // ==================== Article Row ====================
 
@@ -32,8 +65,10 @@ function ArticleRow({ article }: { article: NewsArticle }) {
       {/* Header row */}
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-medium text-text leading-snug">{article.title}</p>
-          <div className="flex items-center gap-2 mt-1">
+          <p className="text-[13px] font-medium text-text leading-snug [overflow-wrap:anywhere]">{article.title}</p>
+          {/* Dibungkus: di 360px sumber + waktu + kategori tidak muat sebaris,
+              dan yang kepotong duluan justru kategorinya. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
             {article.source && (
               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent/10 text-accent">
                 {article.source}
@@ -41,7 +76,7 @@ function ArticleRow({ article }: { article: NewsArticle }) {
             )}
             <span className="text-[11px] text-text-muted">{formatRelativeTime(article.time)}</span>
             {article.categories && (
-              <span className="text-[11px] text-text-muted/50 truncate">{article.categories}</span>
+              <span className="min-w-0 truncate text-[11px] text-text-muted/50">{article.categories}</span>
             )}
           </div>
         </div>
@@ -51,7 +86,7 @@ function ArticleRow({ article }: { article: NewsArticle }) {
       {/* Preview / Expanded */}
       {expanded ? (
         <div className="mt-2 space-y-2">
-          <p className="text-[12px] text-text-muted/80 leading-relaxed whitespace-pre-wrap">{article.content}</p>
+          <p className="text-[12px] text-text-muted/80 leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{article.content}</p>
           {article.link && (
             <a
               href={article.link}
@@ -82,95 +117,162 @@ function ArticleRow({ article }: { article: NewsArticle }) {
 
 export function NewsPage() {
   const { t } = useTranslation()
-  const [articles, setArticles] = useState<NewsArticle[]>([])
-  const [lookback, setLookback] = useState('24h')
-  const [sourceFilter, setSourceFilter] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [sources, setSources] = useState<string[]>([])
 
-  const fetchArticles = useCallback(async (lb: string, src: string) => {
+  // Di URL, bukan `useState`: TabHost membongkar tab yang tidak aktif di bawah
+  // 768px, jadi filter yang tinggal di komponen hilang tiap kali pindah tab.
+  const [lookback, setLookback] = useFilterEnum<Lookback>(
+    'lookback', LOOKBACK_VALUES, DEFAULT_LOOKBACK, { scope: NEWS_SCOPE },
+  )
+  const [source, setSource] = useFilterParam('source', '', { scope: NEWS_SCOPE })
+
+  const [articles, setArticles] = useState<NewsArticle[]>([])
+  const [loading, setLoading] = useState(true)
+  /**
+   * Daftar sumber untuk dropdown. Tidak boleh diturunkan dari `articles`,
+   * karena `articles` adalah respons yang SUDAH disaring oleh `source` sendiri:
+   * begitu satu sumber dipilih, daftarnya menyusut jadi berisi sumber itu saja
+   * dan sumber lain tidak bisa dipilih lagi tanpa memuat ulang halaman.
+   *
+   * Backend tidak punya endpoint yang mendaftar semua sumber (lihat
+   * `src/webui/routes/news.ts`, yang ada cuma `GET /api/news`), jadi ini diisi
+   * dari pilihan terbaik berikutnya: respons yang belum disaring untuk lookback
+   * yang sedang berlaku. Diganti utuh, bukan digabung, supaya sumber yang sudah
+   * keluar dari jendela waktu ikut hilang alih-alih tinggal sebagai pilihan
+   * yang selalu menghasilkan daftar kosong.
+   */
+  const [sourceUniverse, setSourceUniverse] = useState<string[]>([])
+
+  // Filter bisa berganti lebih cepat dari jaringan, dan poll 60 detik jalan
+  // barengan. Tanpa penanda ini, respons lama yang datang belakangan bisa
+  // menimpa hasil filter yang baru.
+  const runIdRef = useRef(0)
+
+  const refresh = useCallback(async (lb: Lookback, src: string) => {
+    const runId = ++runIdRef.current
     try {
-      const res = await api.news.list({
+      const filtered = await api.news.list({
         lookback: lb,
-        limit: 200,
+        limit: FETCH_LIMIT,
         source: src || undefined,
       })
-      setArticles(res.items)
-      const seen = new Set<string>()
-      for (const item of res.items) {
-        if (item.source) seen.add(item.source)
-      }
-      setSources((prev) => {
-        const merged = new Set([...prev, ...seen])
-        return [...merged].sort()
-      })
+      if (runId !== runIdRef.current) return
+      setArticles(filtered.items)
+
+      // Tanpa filter sumber, respons di atas memang sudah daftar lengkapnya,
+      // jadi permintaan kedua tidak perlu.
+      const universe = src
+        ? (await api.news.list({ lookback: lb, limit: FETCH_LIMIT })).items
+        : filtered.items
+      if (runId !== runIdRef.current) return
+      setSourceUniverse(collectSources(universe))
     } catch (err) {
       console.warn('Failed to load news:', err)
     } finally {
-      setLoading(false)
+      if (runId === runIdRef.current) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     setLoading(true)
-    fetchArticles(lookback, sourceFilter)
-  }, [lookback, sourceFilter, fetchArticles])
+    void refresh(lookback, source)
+  }, [lookback, source, refresh])
 
   useEffect(() => {
-    const id = setInterval(() => fetchArticles(lookback, sourceFilter), 60_000)
+    const id = setInterval(() => void refresh(lookback, source), 60_000)
     return () => clearInterval(id)
-  }, [lookback, sourceFilter, fetchArticles])
+  }, [lookback, source, refresh])
+
+  const lookbackOptions = useMemo<FilterOption[]>(
+    () => LOOKBACK_VALUES.map((value) => ({ value, label: t(LOOKBACK_LABEL_KEYS[value]) })),
+    [t],
+  )
+
+  const sourceOptions = useMemo<FilterOption[]>(
+    () => sourceUniverse.map((value) => ({ value, label: value })),
+    [sourceUniverse],
+  )
+
+  // Urutan ditentukan di sini, bukan diwarisi dari API. Versi lama memakai
+  // `[...articles].reverse()`, jadi "terbaru dulu" cuma benar selama API
+  // kebetulan mengirim urutan menaik.
+  const sorted = useMemo(
+    () => [...articles].sort((a, b) => articleTime(b) - articleTime(a)),
+    [articles],
+  )
+
+  // Bawaan 24 jam bisa menipu kalau pengumpul beritanya jarang jalan: layar
+  // kosong terbaca sebagai fitur rusak. Jadi keadaan kosong membawa jalan
+  // keluarnya sendiri, bukan cuma memberitahu bahwa hasilnya kosong.
+  const canWiden = lookback !== WIDEST_LOOKBACK
+  const emptyAction = canWiden || source ? (
+    <>
+      {canWiden && (
+        <button type="button" className="btn-secondary-sm" onClick={() => setLookback(WIDEST_LOOKBACK)}>
+          {t('news.widenRange')}
+        </button>
+      )}
+      {source && (
+        <button type="button" className="btn-secondary-sm" onClick={() => setSource('')}>
+          {t('news.allSources')}
+        </button>
+      )}
+    </>
+  ) : undefined
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader title={t('nav.item.news')} />
 
-      <div className="flex-1 flex flex-col min-h-0 px-4 md:px-6 py-5">
-        <div className="flex flex-col gap-3 h-full">
-          {/* Controls */}
-          <div className="flex items-center gap-3 shrink-0 flex-wrap">
-            <select
-              value={lookback}
-              onChange={(e) => setLookback(e.target.value)}
-              className="bg-bg-tertiary text-text text-sm rounded-md border border-border px-2 py-1.5 outline-none focus:border-accent"
-            >
-              {LOOKBACK_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{t(o.labelKey)}</option>
-              ))}
-            </select>
+      <Container size="default" className="flex flex-1 flex-col min-h-0 py-[clamp(18px,2.8vw,28px)]">
+        <div className="flex h-full min-h-0 flex-col gap-3">
+          <Toolbar ariaLabel={t('nav.item.news')} className="shrink-0">
+            <ToolbarGroup label={t('news.rangeLabel')}>
+              <FilterSelect
+                options={lookbackOptions}
+                value={lookback}
+                onChange={(next) => setLookback(next as Lookback)}
+                allLabel={null}
+                ariaLabel={t('news.rangeLabel')}
+              />
+            </ToolbarGroup>
 
-            <select
-              value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value)}
-              className="bg-bg-tertiary text-text text-sm rounded-md border border-border px-2 py-1.5 outline-none focus:border-accent"
-            >
-              <option value="">{t('news.allSources')}</option>
-              {sources.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            <ToolbarGroup label={t('news.sourceLabel')}>
+              <FilterSelect
+                options={sourceOptions}
+                value={source}
+                onChange={setSource}
+                allLabel={t('news.allSources')}
+                ariaLabel={t('news.sourceLabel')}
+              />
+            </ToolbarGroup>
 
-            <span className="text-xs text-text-muted ml-auto">
-              {t('news.articleCount', { count: articles.length })}
-            </span>
-          </div>
+            <ToolbarGroup end>
+              <span className="text-xs text-text-muted">
+                {t('news.articleCount', { count: sorted.length })}
+              </span>
+            </ToolbarGroup>
+          </Toolbar>
 
           {/* Article list */}
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border bg-bg">
-            {loading && articles.length === 0 ? (
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-bg">
+            {loading && sorted.length === 0 ? (
               <div className="px-4 py-8 text-center text-text-muted">{t('common.loading')}</div>
-            ) : articles.length === 0 ? (
-              <EmptyState title={t('news.noArticles')} description={t('news.noArticlesDescription')} />
+            ) : sorted.length === 0 ? (
+              <EmptyState
+                title={t('news.noArticles')}
+                description={t('news.noArticlesDescription')}
+                action={emptyAction}
+              />
             ) : (
               <div className="divide-y divide-border/50">
-                {[...articles].reverse().map((article, i) => (
+                {sorted.map((article, i) => (
                   <ArticleRow key={`${article.time}-${i}`} article={article} />
                 ))}
               </div>
             )}
           </div>
         </div>
-      </div>
+      </Container>
     </div>
   )
 }

@@ -6,11 +6,15 @@
  * trigger from outside" role for the new workspace-automation system.
  */
 
+import { Container } from '../components/layout/Container'
+
 const CODE = 'rounded bg-black/30 px-1 py-0.5 font-mono text-[12px] text-text/90'
 
 function Block({ children }: { children: string }) {
   return (
-    <pre className="overflow-auto rounded bg-black/30 p-3 text-[12px] leading-snug text-muted whitespace-pre-wrap">
+    // `min-w-0` supaya blok kode menggeser isinya sendiri, bukan mendorong
+    // lebar halaman waktu ada baris panjang yang tidak bisa dibungkus.
+    <pre className="min-w-0 overflow-auto rounded bg-black/30 p-3 text-[12px] leading-snug text-muted whitespace-pre-wrap [overflow-wrap:anywhere]">
       {children}
     </pre>
   )
@@ -18,7 +22,7 @@ function Block({ children }: { children: string }) {
 
 export function AutomationApiSection() {
   return (
-    <div className="max-w-prose mx-auto space-y-6 text-sm leading-relaxed">
+    <Container size="prose" className="space-y-6 text-sm leading-relaxed">
       <section className="space-y-2">
         <h2 className="text-base font-semibold text-text">Workspace automation</h2>
         <p className="text-muted">
@@ -114,6 +118,6 @@ the watchlist — movers, gaps, and overnight headlines that move the thesis.`}<
           was a check that deliberately found nothing to say.
         </p>
       </section>
-    </div>
+    </Container>
   )
 }
