@@ -28,25 +28,33 @@ interface MetricProps {
  * Sizes:
  *   sm — secondary metrics row (Cash, Buying Power, etc.). 16px value.
  *   md — card-level metric (UTA card NLV). 22px value.
- *   lg — page hero (UTA detail page NLV). 28→36px responsive.
+ *   lg — page hero (UTA detail page NLV). Pakai `.text-display`.
+ *
+ * Ukuran `lg` dulu menulis sendiri `text-[28px] md:text-[36px]`, yaitu salinan
+ * tangan dari `.text-display` yang sudah ada di index.css. Sekarang memakai
+ * kelasnya langsung, jadi angka hero di seluruh aplikasi ikut satu skala dan
+ * mengalir mulus, bukan melompat di 768px.
+ *
+ * Nilainya selalu `tabular-nums` karena angka di sini berdetak: tanpa lebar
+ * digit yang sama, seluruh baris bergoyang tiap kali harganya berubah.
  */
 export function Metric({ label, value, delta, valueSign, size = 'md', className }: MetricProps) {
   const valueClass = (() => {
     const color = signColor(valueSign)
     switch (size) {
       case 'sm': return `text-[16px] font-semibold tabular-nums ${color}`
-      case 'lg': return `text-[28px] md:text-[36px] font-bold tabular-nums leading-tight ${color}`
+      case 'lg': return `text-display ${color}`
       case 'md':
       default:   return `text-[22px] font-bold tabular-nums ${color}`
     }
   })()
 
   return (
-    <div className={className}>
-      <p className="text-[11px] text-text-muted uppercase tracking-wide">{label}</p>
-      <p className={valueClass}>{value}</p>
+    <div className={`min-w-0 ${className ?? ''}`}>
+      <p className="text-micro text-text-muted uppercase [overflow-wrap:anywhere]">{label}</p>
+      <p className={`[overflow-wrap:anywhere] ${valueClass}`}>{value}</p>
       {delta && (
-        <p className={`text-[12px] tabular-nums mt-0.5 ${signColor(delta.sign)}`}>
+        <p className={`text-caption tabular-nums mt-0.5 ${signColor(delta.sign)}`}>
           {arrowFor(delta.sign)} {delta.value}
         </p>
       )}

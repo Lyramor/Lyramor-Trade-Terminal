@@ -1,5 +1,6 @@
 import type { UTASnapshotSummary } from '../api'
 import { getIntlLocale } from '../lib/intl'
+import { TableScroll } from './layout/TableScroll'
 
 // ==================== Props ====================
 
@@ -47,13 +48,19 @@ export function SnapshotDetail({ snapshot, onClose }: SnapshotDetailProps) {
           <p className="text-[11px] text-text-muted uppercase tracking-wide mb-1.5">
             Positions ({snapshot.positions.length})
           </p>
-          <div className="border border-border rounded overflow-x-auto">
+          <TableScroll label="Snapshot positions" className="rounded">
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="bg-bg text-text-muted text-left">
                   <th className="px-2.5 py-1.5 font-medium">Symbol</th>
-                  <th className="px-2.5 py-1.5 font-medium text-center">Ccy</th>
+                  {/* Urutan kepala ini dulu Symbol · Ccy · Qty sementara
+                      badannya menggambar symbol · quantity · currency, jadi
+                      jumlah lot terbaca di bawah "Ccy" dan mata uangnya di
+                      bawah "Qty". Kepalanya yang disesuaikan ke badan, karena
+                      badannya yang sudah benar secara visual: angka rata
+                      kanan, kode mata uang di tengah. */}
                   <th className="px-2.5 py-1.5 font-medium text-right">Qty</th>
+                  <th className="px-2.5 py-1.5 font-medium text-center">Ccy</th>
                   <th className="px-2.5 py-1.5 font-medium text-right">Avg Cost</th>
                   <th className="px-2.5 py-1.5 font-medium text-right">Mkt Price</th>
                   <th className="px-2.5 py-1.5 font-medium text-right">Mkt Value</th>
@@ -84,7 +91,7 @@ export function SnapshotDetail({ snapshot, onClose }: SnapshotDetailProps) {
                 })}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         </div>
       )}
 

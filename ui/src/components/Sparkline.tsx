@@ -42,14 +42,20 @@ export function Sparkline({
       : 'var(--color-red)'
   }, [color, values])
 
-  if (values.length < 2) return null
-
   // Unique gradient id per render so multiple sparklines in one tree don't
   // clobber each other's <linearGradient> defs.
+  //
+  // Harus di ATAS `return null` di bawah. Dulu hook ini duduk sesudahnya, jadi
+  // begitu sebuah sparkline berpindah dari "belum cukup data" ke "sudah cukup"
+  // (persis yang terjadi saat snapshot pertama akun mendarat), jumlah hook yang
+  // dipanggil bertambah di tengah jalan dan React melempar "Rendered more hooks
+  // than during the previous render".
   const gradId = useMemo(
     () => `sparkline-grad-${Math.random().toString(36).slice(2, 9)}`,
     [],
   )
+
+  if (values.length < 2) return null
 
   const containerStyle = width != null
     ? { width, height }

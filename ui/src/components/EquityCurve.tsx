@@ -4,6 +4,8 @@ import {
 } from 'recharts'
 import type { EquityCurvePoint } from '../api'
 import { getIntlLocale } from '../lib/intl'
+import { Toolbar } from './layout/Toolbar'
+import { SegmentedControl, type SegmentedOption } from './filters/SegmentedControl'
 
 // ==================== Time ranges ====================
 
@@ -16,6 +18,15 @@ const RANGES = [
   { label: 'All', ms: 0 },
 ] as const
 
+type RangeLabel = (typeof RANGES)[number]['label']
+
+const RANGE_OPTIONS: SegmentedOption<RangeLabel>[] = RANGES.map((r) => ({
+  value: r.label,
+  label: r.label,
+}))
+
+const CHART_HEIGHT = 220
+
 // ==================== Props ====================
 
 interface EquityCurveProps {
@@ -25,6 +36,16 @@ interface EquityCurveProps {
   onAccountChange: (id: string | 'all') => void
   onPointClick?: (point: EquityCurvePoint) => void
   selectedTimestamp?: string | null
+  /**
+   * Tampilkan pemilih akun, termasuk tombol "All".
+   *
+   * Bawaannya mengikuti perilaku lama (`accounts.length > 1`) supaya halaman
+   * detail UTA yang cuma punya satu akun tidak mendadak dapat kendali yang
+   * tidak berarti apa-apa di sana. Halaman Portfolio mengisinya `true` secara
+   * eksplisit: di sana "All" adalah basis yang sama dengan angka hero, jadi
+   * jalan kembali ke sana harus selalu ada, bahkan saat akunnya cuma satu.
+   */
+  showAccountSwitcher?: boolean
 }
 
 // ==================== Component ====================
@@ -32,8 +53,9 @@ interface EquityCurveProps {
 export function EquityCurve({
   points, accounts, selectedAccountId, onAccountChange,
   onPointClick, selectedTimestamp,
+  showAccountSwitcher,
 }: EquityCurveProps) {
-  const [range, setRange] = useState('24H')
+  const [range, setRange] = useState<RangeLabel>('24H')
 
   const filtered = useMemo(() => {
     const r = RANGES.find(r => r.label === range)
@@ -76,65 +98,63 @@ export function EquityCurve({
   // midnights) instead of recharts' arbitrary data-point positions.
   const xTicks = useMemo(() => computeTimeTicks(chartData), [chartData])
 
-  if (chartData.length === 0) return null
-
   const isAllView = selectedAccountId === 'all'
+
+  const accountOptions = useMemo<SegmentedOption<string>[]>(
+    () => [
+      ...accounts.map((a) => ({ value: a.id, label: a.label })),
+      { value: 'all', label: 'All', title: 'Every account combined' },
+    ],
+    [accounts],
+  )
+
+  // Kalau pemanggil tidak menyebut, pakai perilaku lama supaya halaman
+  // satu-akun tidak berubah tanpa diminta.
+  const withSwitcher = showAccountSwitcher ?? accounts.length > 1
 
   return (
     <div className="border border-border rounded-lg bg-bg-secondary p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
+      {/* Kepala: judul + kendali. Membungkus, karena deret rentang dan deret
+          akun bersama-sama tidak pernah muat di telepon. */}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <h3 className="text-[13px] font-semibold text-text-muted uppercase tracking-wide">
           Equity Curve
         </h3>
-        <div className="flex gap-1">
-          {RANGES.map(r => (
-            <button
-              key={r.label}
-              onClick={() => setRange(r.label)}
-              className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
-                range === r.label
-                  ? 'bg-accent/20 text-accent font-medium'
-                  : 'text-text-muted hover:text-text hover:bg-bg-tertiary'
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        <Toolbar dense ariaLabel="Equity curve controls" className="max-w-full">
+          <SegmentedControl
+            options={RANGE_OPTIONS}
+            value={range}
+            onChange={setRange}
+            ariaLabel="Time range"
+            size="sm"
+          />
+          {withSwitcher && (
+            <SegmentedControl
+              options={accountOptions}
+              value={selectedAccountId}
+              onChange={onAccountChange}
+              ariaLabel="Chart account"
+              size="sm"
+            />
+          )}
+        </Toolbar>
       </div>
 
-      {/* Account switcher */}
-      {accounts.length > 1 && (
-        <div className="flex gap-1 mb-3">
-          {accounts.map(a => (
-            <button
-              key={a.id}
-              onClick={() => onAccountChange(a.id)}
-              className={`px-2.5 py-1 text-[11px] rounded border transition-colors ${
-                selectedAccountId === a.id
-                  ? 'border-accent/40 bg-accent/10 text-accent font-medium'
-                  : 'border-border text-text-muted hover:text-text hover:bg-bg-tertiary'
-              }`}
-            >
-              {a.label}
-            </button>
-          ))}
-          <button
-            onClick={() => onAccountChange('all')}
-            className={`px-2.5 py-1 text-[11px] rounded border transition-colors ${
-              isAllView
-                ? 'border-accent/40 bg-accent/10 text-accent font-medium'
-                : 'border-border text-text-muted hover:text-text hover:bg-bg-tertiary'
-            }`}
-          >
-            All
-          </button>
+      {/* Kendalinya sudah digambar di atas, jadi keadaan kosong cuma mengganti
+          badan isinya. Dulu seluruh komponen di-`return null` di sini, dan
+          memilih rentang yang kebetulan kosong berarti tombol rentangnya ikut
+          lenyap: tidak ada lagi jalan kembali ke "All" selain memuat ulang. */}
+      {chartData.length === 0 ? (
+        <div
+          style={{ height: CHART_HEIGHT }}
+          className="flex items-center justify-center rounded border border-dashed border-border px-4 text-center text-[12px] text-text-muted"
+        >
+          {points.length === 0 || range === 'All'
+            ? 'No snapshots recorded for this account yet.'
+            : `No equity data in the last ${range}. Pick a wider range.`}
         </div>
-      )}
-
-      {/* Chart */}
-      <ResponsiveContainer width="100%" height={220}>
+      ) : (
+      <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
         <AreaChart
           data={chartData}
           onClick={(e: any) => {
@@ -189,6 +209,7 @@ export function EquityCurve({
           )}
         </AreaChart>
       </ResponsiveContainer>
+      )}
     </div>
   )
 }

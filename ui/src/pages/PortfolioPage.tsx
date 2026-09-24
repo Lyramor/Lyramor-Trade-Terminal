@@ -1,17 +1,24 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useId, useMemo, useRef } from 'react'
 import { api, type Position, type WalletCommitLog, type EquityCurvePoint, type UTASnapshotSummary } from '../api'
-import { useAutoSave } from '../hooks/useAutoSave'
 import { useAccountHealth } from '../hooks/useAccountHealth'
+import { useFilterParam } from '../hooks/useFilterParam'
 import { useWorkspace } from '../tabs/store'
 import { PageHeader } from '../components/PageHeader'
+import { Container } from '../components/layout/Container'
+import { Section } from '../components/layout/Section'
+import { TableScroll } from '../components/layout/TableScroll'
+import { Toolbar, ToolbarGroup } from '../components/layout/Toolbar'
+import { FilterSelect, type FilterOption } from '../components/filters/FilterSelect'
 import { EmptyState } from '../components/StateViews'
 import { EquityCurve } from '../components/EquityCurve'
 import { SnapshotDetail } from '../components/SnapshotDetail'
-import { Toggle } from '../components/Toggle'
 import { Metric, signFromDelta } from '../components/Metric'
 import { Sparkline } from '../components/Sparkline'
 import { fmt, fmtPnl, fmtNum, fmtPctSigned } from '../lib/format'
 import { contractPrimary } from '../lib/contract-display'
+
+/** Nama ruang untuk filter di URL, supaya tidak bertabrakan dengan halaman lain. */
+const FILTER_SCOPE = 'portfolio'
 
 // ==================== Types ====================
 
@@ -49,6 +56,19 @@ interface PortfolioData {
 const EMPTY: PortfolioData = { equity: null, accounts: [], fxRates: [] }
 
 const CUTOFF_24H_MS = 24 * 60 * 60 * 1000
+const MINUTE_MS = 60 * 1000
+
+/** Berapa titik yang ditarik untuk grafik equity. Dipakai juga saat mencari
+ *  snapshot pasangan sebuah titik, supaya jangkauan keduanya sama persis. */
+const CURVE_LIMIT = 200
+
+/** Kurva agregat untuk sparkline dan delta 24 jam, jauh lebih panjang karena
+ *  dipakai menghitung, bukan digambar penuh. */
+const AGGREGATE_LIMIT = 1500
+
+/** Berapa commit dompet yang ditarik PER AKUN. Angka ini sengaja diekspos ke
+ *  TradeLog supaya judulnya bisa jujur soal batas yang dikenakan di sini. */
+const WALLET_LOG_PER_ACCOUNT = 10
 
 interface CurveSummary {
   total: { values: number[]; firstAtCutoff: number | null; latest: number | null }
@@ -110,21 +130,24 @@ export function PortfolioPage() {
   const [loading, setLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [curvePoints, setCurvePoints] = useState<EquityCurvePoint[]>([])
-  const [curveAccountId, setCurveAccountId] = useState<string | 'all'>('') // '' = not yet initialized
+  // Bawaannya 'all', BUKAN akun pertama. Angka hero tepat di atas grafik
+  // menjumlahkan semua akun; kalau grafiknya diam-diam cuma menggambar satu
+  // akun, dua angka bertetangga punya basis berbeda tanpa ada yang bilang.
+  const [curveAccountId, setCurveAccountId] = useState<string | 'all'>('all')
+  // Cerminan `curveAccountId` yang bisa dibaca tanpa jadi dependency.
+  // `refresh` butuh tahu akun mana yang sedang dipilih, tapi kalau dia
+  // BERGANTUNG pada state-nya, setiap ganti akun bikin `refresh` jadi fungsi
+  // baru, efeknya ikut jalan lagi, dan seluruh data halaman ditarik ulang
+  // padahal `handleAccountChange` sudah menarik kurvanya duluan. Plus
+  // interval 30 detiknya ikut dibongkar-pasang tiap kali.
+  const curveAccountIdRef = useRef<string | 'all'>('all')
   const [selectedTimestamp, setSelectedTimestamp] = useState<string | null>(null)
   const [selectedSnapshot, setSelectedSnapshot] = useState<UTASnapshotSummary | null>(null)
-  const [snapshotEnabled, setSnapshotEnabled] = useState(true)
-  const [snapshotEvery, setSnapshotEvery] = useState('15m')
+  const [snapshotNotice, setSnapshotNotice] = useState<string | null>(null)
   // Aggregate curve (all UTAs, full per-account breakdown) — shared between
   // hero today-PnL delta and per-account sparklines. Distinct from
   // curvePoints which follows the user's chart-account selection.
   const [aggregateCurve, setAggregateCurve] = useState<CurveSummary | null>(null)
-
-  const snapshotConfig = useMemo(() => ({ enabled: snapshotEnabled, every: snapshotEvery }), [snapshotEnabled, snapshotEvery])
-  const saveSnapshotConfig = useCallback(async (d: Record<string, unknown>) => {
-    await api.config.updateSection('snapshot', d)
-  }, [])
-  const { status: snapshotSaveStatus } = useAutoSave({ data: snapshotConfig, save: saveSnapshotConfig })
 
   // Fetch curve data for the user's chart-pane selection (single account
   // or 'all'). Distinct from aggregate-curve — that one is always fetched
@@ -132,11 +155,11 @@ export function PortfolioPage() {
   // chart pane state.
   const fetchCurveData = useCallback(async (accountId: string | 'all') => {
     if (accountId === 'all') {
-      const result = await api.trading.equityCurve({ limit: 200 }).catch(() => ({ points: [] }))
+      const result = await api.trading.equityCurve({ limit: CURVE_LIMIT }).catch(() => ({ points: [] }))
       return result.points
     }
     // Single account — fetch its snapshots and convert to EquityCurvePoint format
-    const { snapshots } = await api.trading.snapshots(accountId, { limit: 200 }).catch(() => ({ snapshots: [] as UTASnapshotSummary[] }))
+    const { snapshots } = await api.trading.snapshots(accountId, { limit: CURVE_LIMIT }).catch(() => ({ snapshots: [] as UTASnapshotSummary[] }))
     return snapshots
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
       .map(s => ({
@@ -148,27 +171,22 @@ export function PortfolioPage() {
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    const [result, configResult, aggregateResult] = await Promise.all([
+    const [result, aggregateResult] = await Promise.all([
       fetchPortfolioData(),
-      api.config.load().catch(() => null),
-      api.trading.equityCurve({ limit: 1500 }).catch(() => ({ points: [] as EquityCurvePoint[] })),
+      api.trading.equityCurve({ limit: AGGREGATE_LIMIT }).catch(() => ({ points: [] as EquityCurvePoint[] })),
     ])
     setData(result)
     setAggregateCurve(summarizeAggregateCurve(aggregateResult.points))
-    if (configResult?.snapshot) {
-      setSnapshotEnabled(configResult.snapshot.enabled)
-      setSnapshotEvery(configResult.snapshot.every)
-    }
 
-    // Default to first account on initial load
-    const effectiveId = curveAccountId || result.accounts[0]?.id || 'all'
-    if (!curveAccountId && effectiveId) setCurveAccountId(effectiveId)
-    const points = await fetchCurveData(effectiveId)
-    setCurvePoints(points)
+    const requested = curveAccountIdRef.current
+    const points = await fetchCurveData(requested)
+    // Pengguna bisa saja ganti akun selagi permintaan ini di jalan. Hasil yang
+    // datang belakangan bukan punya akun yang sekarang dipilih.
+    if (curveAccountIdRef.current === requested) setCurvePoints(points)
 
     setLastRefresh(new Date())
     setLoading(false)
-  }, [curveAccountId, fetchCurveData])
+  }, [fetchCurveData])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -178,33 +196,76 @@ export function PortfolioPage() {
     return () => clearInterval(interval)
   }, [refresh])
 
-  const allPositions = data.accounts.flatMap(a =>
-    a.positions.map(p => ({ ...p, accountLabel: a.label, accountProvider: a.provider })),
+  const allPositions = useMemo(
+    () => data.accounts.flatMap(a =>
+      a.positions.map(p => ({ ...p, accountId: a.id, accountLabel: a.label, accountProvider: a.provider })),
+    ),
+    [data.accounts],
   )
-  const allWalletLogs = data.accounts.flatMap(a =>
-    a.walletLog.map(c => ({ ...c, accountLabel: a.label, accountProvider: a.provider })),
+  const allWalletLogs = useMemo(
+    () => data.accounts.flatMap(a =>
+      a.walletLog.map(c => ({ ...c, accountLabel: a.label, accountProvider: a.provider })),
+    ),
+    [data.accounts],
   )
 
   // Account list for the chart switcher
-  const chartAccounts = data.accounts.map(a => ({ id: a.id, label: a.label }))
+  const chartAccounts = useMemo(
+    () => data.accounts.map(a => ({ id: a.id, label: a.label })),
+    [data.accounts],
+  )
 
   const handleAccountChange = useCallback(async (id: string | 'all') => {
+    curveAccountIdRef.current = id
     setCurveAccountId(id)
     setSelectedSnapshot(null)
     setSelectedTimestamp(null)
+    setSnapshotNotice(null)
     const points = await fetchCurveData(id)
+    if (curveAccountIdRef.current !== id) return
     setCurvePoints(points)
   }, [fetchCurveData])
 
+  // Penanda permintaan snapshot. Klik cepat berturut-turut bisa membuat respons
+  // yang lebih lambat mendarat paling akhir dan menimpa titik yang benar.
+  const snapshotRequestRef = useRef(0)
+
   const handlePointClick = useCallback(async (point: EquityCurvePoint) => {
     setSelectedTimestamp(point.timestamp)
-    const accountId = curveAccountId !== 'all' ? curveAccountId : Object.keys(point.accounts)[0]
+    const accountId = curveAccountId !== 'all' ? curveAccountId : Object.keys(point.accounts ?? {})[0]
     if (!accountId) return
+
+    const token = ++snapshotRequestRef.current
+    setSnapshotNotice(null)
+    const clicked = new Date(point.timestamp).getTime()
+
     try {
-      const { snapshots } = await api.trading.snapshots(accountId, { limit: 1 })
-      if (snapshots.length > 0) setSelectedSnapshot(snapshots[0])
+      // Rentang waktunya DIKIRIM, bukan cuma limit. Versi lama meminta
+      // `{ limit: 1 }` tanpa rentang, jadi mengklik titik mana pun selalu
+      // mengembalikan snapshot TERBARU: garis penandanya menunjuk satu titik
+      // sementara panel detail memperlihatkan keadaan yang sama sekali lain.
+      // Di layar yang dipakai memutuskan soal uang, itu jenis salah yang
+      // paling mahal.
+      const { snapshots } = await api.trading.snapshots(accountId, {
+        limit: CURVE_LIMIT,
+        startTime: point.timestamp,
+        endTime: new Date(clicked + MINUTE_MS).toISOString(),
+      })
+      if (token !== snapshotRequestRef.current) return
+
+      const match = pickSnapshotAt(snapshots, point.timestamp)
+      if (match) {
+        setSelectedSnapshot(match)
+      } else {
+        // Lebih baik tidak menampilkan apa-apa daripada menampilkan snapshot
+        // tetangga seolah-olah itu titik yang diklik.
+        setSelectedSnapshot(null)
+        setSnapshotNotice('No stored snapshot matches that point.')
+      }
     } catch {
-      // Ignore — snapshot fetch failed
+      if (token !== snapshotRequestRef.current) return
+      setSelectedSnapshot(null)
+      setSnapshotNotice('Could not load the snapshot for that point.')
     }
   }, [curveAccountId])
 
@@ -215,6 +276,8 @@ export function PortfolioPage() {
     const hInfo = healthMap[eq.id]
     return { ...eq, provider: acct?.provider ?? '', unrealizedPnL, error: acct?.error, health: eq.health, disabled: hInfo?.disabled ?? false }
   })
+
+  const hasFxPanel = data.fxRates.length > 0
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -234,72 +297,121 @@ export function PortfolioPage() {
       />
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
-        <div className="flex gap-6 items-start">
-          {/* Main column */}
-          <div className="flex-1 min-w-0 space-y-5">
-            <HeroMetrics equity={data.equity} curve={aggregateCurve?.total ?? null} />
+      <div className="flex-1 overflow-y-auto py-5">
+        <Container size="wide">
+          {/* Dua kolom di layar lebar, satu kolom di bawahnya. Penempatannya
+              ditulis eksplisit supaya urutan di telepon masuk akal: isi utama,
+              lalu kurs FX tepat di bawah tabel Positions yang memakainya, baru
+              riwayat transaksi. Dulu ini `flex gap-6 items-start` yang tidak
+              pernah turun kolom sama sekali. */}
+          <div
+            className={`grid grid-cols-1 items-start gap-5 ${
+              hasFxPanel ? 'lg:grid-cols-[1fr_200px]' : 'lg:grid-cols-1'
+            }`}
+          >
+            {/* Main column */}
+            <div className="min-w-0 space-y-5 lg:col-start-1 lg:row-start-1">
+              <HeroMetrics equity={data.equity} curve={aggregateCurve?.total ?? null} />
 
-            {curvePoints.length > 0 && (
-              <EquityCurve
-                points={curvePoints}
-                accounts={chartAccounts}
-                selectedAccountId={curveAccountId}
-                onAccountChange={handleAccountChange}
-                onPointClick={handlePointClick}
-                selectedTimestamp={selectedTimestamp}
-              />
-            )}
+              {data.accounts.length > 0 && (
+                <EquityCurve
+                  points={curvePoints}
+                  accounts={chartAccounts}
+                  selectedAccountId={curveAccountId}
+                  onAccountChange={handleAccountChange}
+                  onPointClick={handlePointClick}
+                  selectedTimestamp={selectedTimestamp}
+                  showAccountSwitcher
+                />
+              )}
 
-            <SnapshotSettings
-              enabled={snapshotEnabled}
-              every={snapshotEvery}
-              onEnabledChange={setSnapshotEnabled}
-              onEveryChange={setSnapshotEvery}
-              saveStatus={snapshotSaveStatus}
-            />
+              {selectedSnapshot && (
+                <SnapshotDetail
+                  snapshot={selectedSnapshot}
+                  onClose={() => { setSelectedSnapshot(null); setSelectedTimestamp(null) }}
+                />
+              )}
 
-            {selectedSnapshot && (
-              <SnapshotDetail
-                snapshot={selectedSnapshot}
-                onClose={() => { setSelectedSnapshot(null); setSelectedTimestamp(null) }}
-              />
-            )}
+              {snapshotNotice && !selectedSnapshot && (
+                <p className="rounded-lg border border-border bg-bg-secondary px-3 py-2 text-[12px] text-text-muted">
+                  {snapshotNotice}
+                </p>
+              )}
 
-            {accountSources.length > 0 && (
-              <AccountStrip
-                sources={accountSources}
-                perAccountCurve={aggregateCurve?.perAccount ?? {}}
-              />
-            )}
+              {accountSources.length > 0 && (
+                <AccountStrip
+                  sources={accountSources}
+                  perAccountCurve={aggregateCurve?.perAccount ?? {}}
+                />
+              )}
 
-            {allPositions.length > 0 && (
-              <PositionsTable positions={allPositions} fxRates={data.fxRates} />
-            )}
+              {allPositions.length > 0 && (
+                <PositionsTable positions={allPositions} fxRates={data.fxRates} />
+              )}
 
-            {/* Empty states */}
-            {data.accounts.length === 0 && !loading && (
-              <NoAccountsEmpty />
-            )}
-            {data.accounts.length > 0 && allPositions.length === 0 && !loading && (
-              <EmptyState title="No open positions." />
+              {/* Empty states */}
+              {data.accounts.length === 0 && !loading && (
+                <NoAccountsEmpty />
+              )}
+              {data.accounts.length > 0 && allPositions.length === 0 && !loading && (
+                <EmptyState title="No open positions." />
+              )}
+            </div>
+
+            {/* Kurs FX. Dulu `hidden lg:block`, jadi di bawah 1024px angkanya
+                LENYAP, padahal kolom "USD Value" di tabel Positions dihitung
+                dari kurs yang sama. Sekarang dia pindah tempat, bukan hilang. */}
+            {hasFxPanel && (
+              <aside className="min-w-0 self-start lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:sticky lg:top-5">
+                <FxRatesPanel rates={data.fxRates} />
+              </aside>
             )}
 
             {allWalletLogs.length > 0 && (
-              <TradeLog commits={allWalletLogs} />
+              <div className="min-w-0 lg:col-start-1 lg:row-start-2">
+                <TradeLog commits={allWalletLogs} perAccountLimit={WALLET_LOG_PER_ACCOUNT} />
+              </div>
             )}
           </div>
-
-          {/* Right sidebar — FX rates */}
-          {data.fxRates.length > 0 && (
-            <div className="hidden lg:block w-[200px] shrink-0 sticky top-5">
-              <FxRatesPanel rates={data.fxRates} />
-            </div>
-          )}
-        </div>
+        </Container>
       </div>
     </div>
   )
+}
+
+// ==================== Snapshot matching ====================
+
+/**
+ * Cari snapshot yang benar-benar milik satu titik di grafik.
+ *
+ * Titik pada kurva satu akun memakai cap waktu snapshot apa adanya, jadi
+ * kecocokan persis biasanya langsung ketemu. Kurva gabungan lain ceritanya:
+ * server mengelompokkan snapshot per menit dengan `setSeconds(0, 0)`, jadi
+ * cap waktu titiknya selalu dibulatkan KE BAWAH. Artinya snapshot yang benar
+ * pasti berada di `[titik, titik + 1 menit)`, dan yang paling awal di jendela
+ * itulah yang membentuk titiknya.
+ *
+ * Kalau tidak ada yang cocok, kembalikan `null`. Mengembalikan tetangga
+ * terdekat akan terlihat benar dan diam-diam salah.
+ */
+function pickSnapshotAt(
+  snapshots: UTASnapshotSummary[],
+  timestamp: string,
+): UTASnapshotSummary | null {
+  const exact = snapshots.find(s => s.timestamp === timestamp)
+  if (exact) return exact
+
+  const start = new Date(timestamp).getTime()
+  if (!Number.isFinite(start)) return null
+
+  let best: UTASnapshotSummary | null = null
+  let bestTime = Infinity
+  for (const s of snapshots) {
+    const t = new Date(s.timestamp).getTime()
+    if (!Number.isFinite(t) || t < start || t >= start + MINUTE_MS) continue
+    if (t < bestTime) { best = s; bestTime = t }
+  }
+  return best
 }
 
 // ==================== Data Fetching ====================
@@ -321,7 +433,7 @@ async function fetchPortfolioData(): Promise<PortfolioData> {
         try {
           const [posResp, logResp] = await Promise.all([
             api.trading.utaPositions(acct.id),
-            api.trading.walletLog(acct.id, 10),
+            api.trading.walletLog(acct.id, WALLET_LOG_PER_ACCOUNT),
           ])
           return { ...acct, positions: posResp.positions, walletLog: logResp.commits }
         } catch {
@@ -400,7 +512,10 @@ function HeroMetrics({ equity, curve }: {
         value={fmt(total, 'USD')}
         delta={todayDelta ?? { value: '— today', sign: 'flat' }}
       />
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-border">
+      {/* Satu kolom dulu, baru tiga. Dua kolom di 360px memaksa nilai mata
+          uang penuh berdesakan di kolom selebar ~150px dan angkanya terbungkus
+          di tengah-tengah. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-border">
         <Metric size="sm" label="Cash" value={fmt(cash, 'USD')} />
         <Metric
           size="sm"
@@ -481,7 +596,10 @@ function AccountStrip({ sources, perAccountCurve }: {
               </div>
             </div>
             {showSpark && (
-              <div className="hidden md:block shrink-0">
+              // Dulu `hidden md:block`. Sparkline-nya cuma 88px dan kartunya
+              // muat, jadi tidak ada alasan membuang satu-satunya petunjuk
+              // arah gerak akun justru di layar yang paling sering dipakai.
+              <div className="shrink-0">
                 <Sparkline values={curve!.values} width={88} height={36} color="auto" />
               </div>
             )}
@@ -495,6 +613,7 @@ function AccountStrip({ sources, perAccountCurve }: {
 // ==================== Positions Table ====================
 
 interface PositionWithAccount extends Position {
+  accountId: string
   accountLabel: string
   accountProvider: string
 }
@@ -515,16 +634,82 @@ function contractDisplay(p: Position): { name: string; tag: string } {
   return { name: contractPrimary(p.contract), tag: p.contract.secType || 'UNK' }
 }
 
+/** Cocokkan kata kunci ke nama tampilan, simbol mentah, dan simbol lokal.
+ *  Orang mengetik "AAPL" maupun "Apple", dan keduanya harus kena. */
+function matchesQuery(p: PositionWithAccount, needle: string): boolean {
+  if (!needle) return true
+  const haystack = [
+    contractPrimary(p.contract),
+    p.contract.symbol,
+    p.contract.localSymbol,
+  ]
+  return haystack.some(part => part?.toLowerCase().includes(needle))
+}
+
 function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount[]; fxRates: FxRateInfo[] }) {
+  const searchId = useId()
+  // Filter tinggal di URL, jadi tidak ikut hilang saat tabnya dibongkar di
+  // telepon. Lihat docblock useFilterParam.
+  const [query, setQuery] = useFilterParam('symbol', '', { scope: FILTER_SCOPE })
+  const [accountId, setAccountId] = useFilterParam('account', '', { scope: FILTER_SCOPE })
+
+  // Daftar akun dibangun dari posisi yang BELUM disaring. Kalau dibangun dari
+  // hasil saringan, memilih satu akun bikin akun lain lenyap dari dropdown dan
+  // tidak pernah bisa dipilih lagi.
+  const accountOptions = useMemo<FilterOption[]>(() => {
+    const seen = new Map<string, string>()
+    for (const p of positions) if (!seen.has(p.accountId)) seen.set(p.accountId, p.accountLabel)
+    return [...seen].map(([value, label]) => ({ value, label }))
+  }, [positions])
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return positions.filter(p => {
+      if (accountId && p.accountId !== accountId) return false
+      return matchesQuery(p, needle)
+    })
+  }, [positions, query, accountId])
+
   const rateMap = Object.fromEntries(fxRates.map(r => [r.currency, r.rate]))
-  const hasNonUsd = positions.some(p => p.currency && p.currency !== 'USD')
+  const hasNonUsd = filtered.some(p => p.currency && p.currency !== 'USD')
+  const narrowed = filtered.length !== positions.length
 
   return (
-    <div>
-      <h3 className="text-[13px] font-semibold text-text-muted uppercase tracking-wide mb-3">
-        Positions
-      </h3>
-      <div className="border border-border rounded-lg overflow-x-auto">
+    <Section
+      pad="none"
+      title="Positions"
+      description={
+        narrowed
+          ? `${filtered.length} of ${positions.length} positions`
+          : `${positions.length} positions`
+      }
+      actions={
+        <Toolbar dense ariaLabel="Position filters" className="max-w-full">
+          <ToolbarGroup label="Symbol" htmlFor={searchId} grow>
+            <input
+              id={searchId}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search symbol…"
+              className="min-w-0 w-full max-w-[200px] rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-[12px] text-text outline-none transition-colors focus:border-accent [@media(pointer:coarse)]:py-2"
+            />
+          </ToolbarGroup>
+          <FilterSelect
+            label="Account"
+            options={accountOptions}
+            value={accountId}
+            onChange={setAccountId}
+            allLabel="All accounts"
+            size="sm"
+          />
+        </Toolbar>
+      }
+    >
+      {filtered.length === 0 ? (
+        <EmptyState title="No positions match this filter." />
+      ) : (
+      <TableScroll label="Positions">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-bg-secondary text-text-muted text-left">
@@ -540,7 +725,7 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
             </tr>
           </thead>
           <tbody>
-            {positions.map((p, i) => {
+            {filtered.map((p, i) => {
               const display = contractDisplay(p)
               const ccy = p.currency ?? 'USD'
               const fxRate = ccy === 'USD' ? 1 : (rateMap[ccy] ?? 1)
@@ -548,7 +733,7 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
               const isShort = p.side === 'short'
 
               return (
-                <tr key={i} className="border-t border-border hover:bg-bg-tertiary/30 transition-colors">
+                <tr key={`${p.accountId}:${p.contract.aliceId ?? p.contract.symbol ?? i}`} className="border-t border-border hover:bg-bg-tertiary/30 transition-colors">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-text">{display.name}</span>
@@ -584,8 +769,9 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
             })}
           </tbody>
         </table>
-      </div>
-    </div>
+      </TableScroll>
+      )}
+    </Section>
   )
 }
 
@@ -593,11 +779,8 @@ function PositionsTable({ positions, fxRates }: { positions: PositionWithAccount
 
 function FxRatesPanel({ rates }: { rates: FxRateInfo[] }) {
   return (
-    <div>
-      <h3 className="text-[11px] font-semibold text-text-muted uppercase tracking-wide mb-2">
-        FX Rates
-      </h3>
-      <div className="border border-border rounded-lg overflow-hidden">
+    <Section pad="none" title="FX Rates" headingLevel={3}>
+      <TableScroll label="FX rates">
         <table className="w-full text-[12px]">
           <tbody>
             {rates.map(r => (
@@ -613,9 +796,9 @@ function FxRatesPanel({ rates }: { rates: FxRateInfo[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScroll>
       <p className="text-[10px] text-text-muted/50 mt-1.5 text-right">per 1 unit → USD</p>
-    </div>
+    </Section>
   )
 }
 
@@ -626,20 +809,49 @@ interface CommitWithAccount extends WalletCommitLog {
   accountProvider: string
 }
 
-function TradeLog({ commits }: { commits: CommitWithAccount[] }) {
-  const sorted = [...commits]
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 10)
+/** Berapa commit yang ditampilkan sebelum pengguna minta lebih. */
+const TRADE_PREVIEW = 10
+
+function TradeLog({ commits, perAccountLimit }: {
+  commits: CommitWithAccount[]
+  perAccountLimit: number
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  const sorted = useMemo(
+    () => [...commits].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    [commits],
+  )
 
   if (sorted.length === 0) return null
 
+  // Dulu di sini ada `.slice(0, 10)` diam-diam: dengan tiga akun, 30 commit
+  // ditarik lalu 20 di antaranya dibuang tanpa tanda apa pun, dan judulnya
+  // cuma bilang "Recent Trades". Sekarang jumlahnya disebut dan sisanya bisa
+  // dibuka. Batas per akun ikut ditulis di penjelas, karena itu pemotongan
+  // kedua yang terjadi lebih dulu, di tingkat fetch.
+  const visible = expanded ? sorted : sorted.slice(0, TRADE_PREVIEW)
+  const hidden = sorted.length - visible.length
+
   return (
-    <div>
-      <h3 className="text-[13px] font-semibold text-text-muted uppercase tracking-wide mb-3">
-        Recent Trades
-      </h3>
+    <Section
+      pad="none"
+      title="Recent Trades"
+      description={`Newest ${perAccountLimit} commits per account, ${sorted.length} in total.`}
+      actions={
+        sorted.length > TRADE_PREVIEW ? (
+          <button
+            type="button"
+            onClick={() => setExpanded(v => !v)}
+            className="btn-secondary-sm"
+          >
+            {expanded ? 'Show fewer' : `Show all ${sorted.length}`}
+          </button>
+        ) : undefined
+      }
+    >
       <div className="space-y-2">
-        {sorted.map((commit) => {
+        {visible.map((commit) => {
           const badgeColor = commit.accountProvider === 'ccxt'
             ? 'bg-accent/15 text-accent'
             : commit.accountProvider === 'alpaca'
@@ -677,69 +889,12 @@ function TradeLog({ commits }: { commits: CommitWithAccount[] }) {
           )
         })}
       </div>
-    </div>
-  )
-}
 
-// ==================== Snapshot Settings ====================
-
-const INTERVAL_PRESETS = [
-  { label: '1m', value: '1m' },
-  { label: '5m', value: '5m' },
-  { label: '15m', value: '15m' },
-  { label: '30m', value: '30m' },
-  { label: '1h', value: '1h' },
-]
-
-function SnapshotSettings({ enabled, every, onEnabledChange, onEveryChange, saveStatus }: {
-  enabled: boolean
-  every: string
-  onEnabledChange: (v: boolean) => void
-  onEveryChange: (v: string) => void
-  saveStatus: string
-}) {
-  const isPreset = INTERVAL_PRESETS.some(p => p.value === every)
-  const [showCustom, setShowCustom] = useState(!isPreset)
-
-  return (
-    <div className="flex items-center gap-3 text-[12px] text-text-muted">
-      <span className="font-medium uppercase tracking-wide">Snapshots</span>
-      <Toggle checked={enabled} onChange={onEnabledChange} size="sm" />
-      <div className="flex gap-0.5">
-        {INTERVAL_PRESETS.map(p => (
-          <button
-            key={p.value}
-            onClick={() => { onEveryChange(p.value); setShowCustom(false) }}
-            className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
-              every === p.value && !showCustom
-                ? 'bg-accent/20 text-accent font-medium'
-                : 'hover:text-text hover:bg-bg-tertiary'
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-        <button
-          onClick={() => setShowCustom(true)}
-          className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
-            showCustom
-              ? 'bg-accent/20 text-accent font-medium'
-              : 'hover:text-text hover:bg-bg-tertiary'
-          }`}
-        >
-          Custom
-        </button>
-      </div>
-      {showCustom && (
-        <input
-          className="w-16 px-1.5 py-0.5 rounded border border-border bg-bg text-text text-[12px] text-center"
-          value={every}
-          onChange={(e) => onEveryChange(e.target.value)}
-          placeholder="e.g. 2h"
-        />
+      {hidden > 0 && (
+        <p className="mt-2 text-[11px] text-text-muted/70">
+          {hidden} older {hidden === 1 ? 'commit' : 'commits'} hidden.
+        </p>
       )}
-      {saveStatus === 'saving' && <span className="text-accent text-[10px]">saving...</span>}
-      {saveStatus === 'error' && <span className="text-red text-[10px]">save failed</span>}
-    </div>
+    </Section>
   )
 }
