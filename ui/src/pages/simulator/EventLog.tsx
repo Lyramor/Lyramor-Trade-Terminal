@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import { Section } from '../../components/form'
+import { TableScroll } from '../../components/layout/TableScroll'
 import { formatRelativeTime } from '../../lib/intl'
 import type { SimulatorEvent } from './useSimulatorState'
 
@@ -31,24 +32,28 @@ export function EventLog({ events }: { events: SimulatorEvent[] }) {
         <p className="text-xs text-text-muted">No actions yet.</p>
       ) : (
         <>
-          <table className="w-full text-sm">
-            <tbody>
-              {visible.map((ev) => (
-                <tr key={ev.id} className="text-text">
-                  <td className="py-0.5 pr-3 font-mono text-[11px] text-text-muted/80 w-20">{formatTime(ev.ts)}</td>
-                  <td className="py-0.5 pr-3 text-text-muted/60 text-[11px] w-20">{formatRelativeTime(ev.ts)}</td>
-                  <td className="py-0.5 pr-3">
-                    <span className={ev.status === 'err' ? 'text-red' : 'text-text'}>{ev.label}</span>
-                    {ev.detail && (
-                      <span className="ml-2 text-[11px] text-red/80" title={ev.detail}>
-                        {ev.detail.slice(0, 60)}{ev.detail.length > 60 ? '…' : ''}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Dua kolom waktu dipatok w-20, jadi kolom label ikut terjepit dan
+              kepotong di telepon kalau barisnya tidak bisa digeser. */}
+          <TableScroll label="Simulator event log" bordered={false}>
+            <table className="w-full text-sm min-w-[420px]">
+              <tbody>
+                {visible.map((ev) => (
+                  <tr key={ev.id} className="text-text">
+                    <td className="py-0.5 pr-3 font-mono text-[11px] text-text-muted/80 w-20">{formatTime(ev.ts)}</td>
+                    <td className="py-0.5 pr-3 text-text-muted/60 text-[11px] w-20">{formatRelativeTime(ev.ts)}</td>
+                    <td className="py-0.5 pr-3">
+                      <span className={ev.status === 'err' ? 'text-red' : 'text-text'}>{ev.label}</span>
+                      {ev.detail && (
+                        <span className="ml-2 text-[11px] text-red/80" title={ev.detail}>
+                          {ev.detail.slice(0, 60)}{ev.detail.length > 60 ? '…' : ''}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
 
           {events.length > COLLAPSED_COUNT && (
             <button

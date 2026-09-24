@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useToast } from '../../components/Toast'
+import { useFilterParam } from '../../hooks/useFilterParam'
 import {
   simulatorApi,
   type SimulatorState,
@@ -19,6 +20,9 @@ import {
 
 const POLL_INTERVAL_MS = 3000
 const MAX_EVENTS = 50
+
+/** Satu ruang untuk semua parameter halaman simulator. */
+export const SIMULATOR_SCOPE = 'dev.simulator'
 
 export interface SimulatorEvent {
   id: number
@@ -49,12 +53,22 @@ export interface UseSimulatorStateResult {
 
 export function useSimulatorState(): UseSimulatorStateResult {
   const [utas, setUtas] = useState<SimulatorUTAEntry[]>([])
-  const [selectedId, setSelectedId] = useState<string>('')
   const [state, setState] = useState<SimulatorState | null>(null)
   const [loading, setLoading] = useState(false)
   const [events, setEvents] = useState<SimulatorEvent[]>([])
   const toast = useToast()
   const eventCounter = useRef(0)
+
+  // Akun yang sedang dibuka tinggal di URL. Sebagai useState lokal, pilihannya
+  // hilang tiap kali pengguna pindah tab di telepon, karena TabHost membongkar
+  // tab yang tidak aktif.
+  const [selectedId, setSelectedId] = useFilterParam('sim', '', { scope: SIMULATOR_SCOPE })
+
+  // Pembaruan dari URL tidak punya bentuk "pakai nilai sebelumnya", jadi nilai
+  // terakhir dipegang di ref untuk dipakai refreshUtaList tanpa memasukkan
+  // selectedId ke daftar dependency-nya.
+  const selectedIdRef = useRef(selectedId)
+  useEffect(() => { selectedIdRef.current = selectedId }, [selectedId])
 
   const appendEvent = useCallback((ev: Omit<SimulatorEvent, 'id'>) => {
     setEvents((prev) => {
@@ -68,16 +82,18 @@ export function useSimulatorState(): UseSimulatorStateResult {
     try {
       const r = await simulatorApi.listUtas()
       setUtas(r.utas)
-      setSelectedId((cur) => {
-        if (cur && r.utas.some((u) => u.id === cur)) return cur
-        return r.utas[0]?.id ?? ''
-      })
+      const current = selectedIdRef.current
+      // Id dari URL bisa saja menunjuk simulator yang sudah tidak ada, misal
+      // setelah dev server restart. Kalau begitu, jatuh ke yang pertama.
+      if (!current || !r.utas.some((u) => u.id === current)) {
+        setSelectedId(r.utas[0]?.id ?? '')
+      }
       return r.utas
     } catch (err) {
       toast.error(`Failed to list simulators: ${err instanceof Error ? err.message : err}`)
       return []
     }
-  }, [toast])
+  }, [toast, setSelectedId])
 
   const refresh = useCallback(async () => {
     if (!selectedId) {

@@ -21,6 +21,8 @@
 import { useCallback } from 'react'
 import { getIntlLocale } from '../lib/intl'
 import { Spinner, EmptyState } from '../components/StateViews'
+import { Container } from '../components/layout/Container'
+import { Toolbar, ToolbarGroup } from '../components/layout/Toolbar'
 import { useSimulatorState } from './simulator/useSimulatorState'
 import { CreateSimulatorSection } from './simulator/CreateSimulatorSection'
 import { MarkPrices } from './simulator/MarkPrices'
@@ -38,7 +40,7 @@ export function SimulatorPage() {
   }, [sim])
 
   return (
-    <div className="px-4 md:px-6 py-5 max-w-[1200px] space-y-5">
+    <Container size="wide" align="start" className="py-5 space-y-5">
       <TopBar
         utas={sim.utas}
         selectedId={sim.selectedId}
@@ -71,7 +73,7 @@ export function SimulatorPage() {
           <EventLog events={sim.events} />
         </>
       )}
-    </div>
+    </Container>
   )
 }
 
@@ -89,8 +91,8 @@ function TopBar({ utas, selectedId, onSelect, cash, onRefresh }: {
   }
 
   return (
-    <div className="flex items-center gap-3 flex-wrap">
-      <div className="flex items-center gap-1 flex-wrap" role="tablist" aria-label="Simulator accounts">
+    <Toolbar ariaLabel="Simulator accounts">
+      <div className="flex min-w-0 items-center gap-1 flex-wrap" role="tablist" aria-label="Simulator accounts">
         {utas.map((u) => {
           const active = u.id === selectedId
           return (
@@ -114,18 +116,20 @@ function TopBar({ utas, selectedId, onSelect, cash, onRefresh }: {
 
       <button
         onClick={onRefresh}
-        className="px-2.5 py-1 text-xs bg-bg-tertiary text-text-muted rounded hover:text-text transition-colors"
+        className="shrink-0 cursor-pointer px-2.5 py-1 text-xs bg-bg-tertiary text-text-muted rounded hover:text-text transition-colors"
       >
         Refresh
       </button>
 
       {cash !== undefined && (
-        <span className="ml-auto text-[12px] text-text-muted uppercase tracking-wide">
-          Cash <span className="font-mono text-text text-sm normal-case ml-1.5">
-            ${Number(cash).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2 })}
+        <ToolbarGroup end>
+          <span className="text-[12px] text-text-muted uppercase tracking-wide">
+            Cash <span className="font-mono text-text text-sm normal-case ml-1.5">
+              ${Number(cash).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2 })}
+            </span>
           </span>
-        </span>
+        </ToolbarGroup>
       )}
-    </div>
+    </Toolbar>
   )
 }

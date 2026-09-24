@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { type AppConfig, type NewsCollectorConfig, type NewsCollectorFeed } from '../api'
 import { SaveIndicator } from '../components/SaveIndicator'
 import { ConfigSection, Field, inputClass } from '../components/form'
+import { Container } from '../components/layout/Container'
 import { Toggle } from '../components/Toggle'
 import { useConfigPage } from '../hooks/useConfigPage'
 import { PageHeader } from '../components/PageHeader'
@@ -27,8 +28,8 @@ function CollectorSettings() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[880px] mx-auto">
-        <div className="flex items-center justify-end gap-3 mb-4">
+      <Container size="form">
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 mb-4">
           <SaveIndicator status={status} onRetry={retry} />
           <Toggle size="sm" checked={enabled} onChange={(v) => updateConfigImmediate({ enabled: v })} />
         </div>
@@ -68,7 +69,7 @@ function CollectorSettings() {
           />
         </div>
         {loadError && <p className="text-[13px] text-red mt-4">Failed to load configuration.</p>}
-      </div>
+      </Container>
     </div>
   )
 }
@@ -203,7 +204,7 @@ export function NewsCollectorPage() {
         description="Configure RSS feeds and collection settings."
       />
 
-      <div className="flex-1 flex flex-col min-h-0 px-4 md:px-8 py-5">
+      <div className="flex-1 flex flex-col min-h-0 py-5">
         <CollectorSettings />
       </div>
     </div>

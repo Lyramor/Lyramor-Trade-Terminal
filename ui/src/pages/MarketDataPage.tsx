@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type AppConfig } from '../api'
 import { SaveIndicator } from '../components/SaveIndicator'
 import { ConfigSection, Field, inputClass } from '../components/form'
+import { Container } from '../components/layout/Container'
 import { Toggle } from '../components/Toggle'
 import { useConfigPage } from '../hooks/useConfigPage'
+import { useFilterFlag } from '../hooks/useFilterParam'
 import { PageHeader } from '../components/PageHeader'
 
 type MarketDataConfig = Record<string, unknown>
@@ -161,7 +163,11 @@ export function MarketDataPage() {
     extract: (full: AppConfig) => (full as Record<string, unknown>).marketData as MarketDataConfig,
   })
 
-  const [advancedOpen, setAdvancedOpen] = useState(false)
+  // Ikut ke URL supaya seksi Advanced tidak menutup sendiri tiap pengguna
+  // pindah tab di telepon, tempat tab yang tidak aktif memang dibongkar.
+  const [advancedOpen, setAdvancedOpen] = useFilterFlag('advanced', false, {
+    scope: 'settings.market-data',
+  })
   const [highlightFmp, setHighlightFmp] = useState(false)
   const [ping, setPing] = useState<HubPing>('checking')
   const fmpRef = useRef<HTMLDivElement>(null)
@@ -247,30 +253,59 @@ export function MarketDataPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-5">
-        <div className={`max-w-[880px] mx-auto ${!enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          <HubCard
-            hub={hub}
-            ping={ping}
-            onToggle={(v) => updateConfigImmediate({ hub: { ...hub, enabled: v } })}
-          />
+      <div className="flex-1 overflow-y-auto py-5">
+        <Container size="form">
+          {/*
+            Saklar utama juga hidup di dalam isi halaman, bukan cuma di
+            PageHeader. Dulu saat `enabled` mati, SELURUH kolom ini diredupkan
+            dan dimatikan klik-nya, dan satu-satunya saklar untuk menyalakannya
+            lagi ada di PageHeader yang ikut tergulir hilang. Halamannya jadi
+            terbaca seperti rusak. Pita ini menempel di atas selama digulir,
+            jadi jalan keluarnya selalu terjangkau.
+          */}
+          {!enabled && (
+            <div className="sticky top-0 z-10 mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-border bg-bg px-4 py-3">
+              <div className="min-w-0 flex-1 basis-[18rem]">
+                <p className="text-[13px] font-medium text-text">Market data is off</p>
+                <p className="text-[12px] text-text-muted">
+                  Nothing below is being used, and the settings are read-only until you switch it
+                  back on.
+                </p>
+              </div>
+              <Toggle
+                size="sm"
+                checked={enabled}
+                onChange={(v) => updateConfigImmediate({ enabled: v })}
+                ariaLabel="Enable market data"
+              />
+            </div>
+          )}
 
-          <SourcesCard rows={sourceRows} onAddFmp={jumpToFmp} />
+          <div className={!enabled ? 'opacity-40 pointer-events-none' : undefined}>
+            <HubCard
+              hub={hub}
+              ping={ping}
+              onToggle={(v) => updateConfigImmediate({ hub: { ...hub, enabled: v } })}
+            />
 
-          <ChartVendorsSection extraVendors={extraVendors} onToggle={handleExtraVendorToggle} />
+            <SourcesCard rows={sourceRows} onAddFmp={jumpToFmp} />
 
-          <AdvancedSection
-            open={advancedOpen}
-            onToggle={() => setAdvancedOpen((o) => !o)}
-            providerKeys={providerKeys}
-            onKeyChange={handleKeyChange}
-            hub={hub}
-            onHubChange={(next) => updateConfigImmediate({ hub: next })}
-            fmpRef={fmpRef}
-            highlightFmp={highlightFmp}
-          />
-        </div>
-        {loadError && <p className="text-[13px] text-red mt-4 max-w-[880px] mx-auto">Failed to load configuration.</p>}
+            <ChartVendorsSection extraVendors={extraVendors} onToggle={handleExtraVendorToggle} />
+
+            <AdvancedSection
+              open={advancedOpen}
+              onToggle={() => setAdvancedOpen(!advancedOpen)}
+              providerKeys={providerKeys}
+              onKeyChange={handleKeyChange}
+              hub={hub}
+              onHubChange={(next) => updateConfigImmediate({ hub: next })}
+              fmpRef={fmpRef}
+              highlightFmp={highlightFmp}
+            />
+          </div>
+
+          {loadError && <p className="text-[13px] text-red mt-4">Failed to load configuration.</p>}
+        </Container>
       </div>
     </div>
   )
@@ -291,8 +326,8 @@ function HubCard({
 
   return (
     <section className="mb-6 border border-border/60 rounded-xl bg-bg-secondary/50 p-5">
-      <div className="flex items-center justify-between mb-1.5">
-        <h2 className="text-[14px] font-semibold">Data Hub</h2>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-1.5">
+        <h2 className="min-w-0 flex-1 basis-[12rem] text-[14px] font-semibold">Data Hub</h2>
         <Toggle size="sm" checked={hub.enabled} onChange={onToggle} />
       </div>
       {hub.enabled ? (
@@ -328,11 +363,11 @@ function SourcesCard({ rows, onAddFmp }: { rows: SourceRow[]; onAddFmp: () => vo
       <h2 className="text-[13px] font-semibold text-text-muted uppercase tracking-wider mb-2">Data Sources</h2>
       <div className="border border-border/60 rounded-xl bg-bg-secondary/50 divide-y divide-border/40">
         {rows.map((row) => (
-          <div key={row.name} className="flex items-center gap-3 px-4 py-3">
+          <div key={row.name} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
             <span
               className={`w-2 h-2 rounded-full shrink-0 ${row.state === 'ok' ? 'bg-green' : 'border border-text-muted/50'}`}
             />
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1 basis-[13rem]">
               <span className="text-[13px] text-text font-medium">{row.name}</span>
               {row.detail && <span className="text-[12px] text-text-muted/60 ml-2">{row.detail}</span>}
             </div>

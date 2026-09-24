@@ -20,6 +20,7 @@ import type { CredentialSummary, WorkspaceCredentialDefaultsResponse } from '../
 import { PageHeader } from '../components/PageHeader'
 import { PageLoading } from '../components/StateViews'
 import { Field, inputClass } from '../components/form'
+import { Container } from '../components/layout/Container'
 import { ModelCombobox } from '../components/credentials/PresetFields'
 import {
   VENDOR_BY_PRESET, isApiKeyPreset, presetModels, vendorPreset, WIRE_SHAPE_SHORT,
@@ -125,8 +126,8 @@ export function AIProviderPage() {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader title="AI Provider" description="Credentials Alice holds and injects into workspaces." />
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6">
-        <div className="max-w-[1100px] mx-auto grid gap-6 lg:grid-cols-2">
+      <div className="flex-1 overflow-y-auto py-6">
+        <Container size="default" className="grid gap-6 lg:grid-cols-2">
           {/* ============== Credentials ============== */}
           <section>
             <div className="rounded-lg border border-border/50 bg-bg-secondary/50 px-4 py-3 mb-4">
@@ -139,8 +140,8 @@ export function AIProviderPage() {
               </p>
             </div>
 
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] font-semibold text-text uppercase tracking-[0.08em] font-mono">Credentials</h2>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
+              <h2 className="min-w-0 flex-1 basis-[10rem] text-[11px] font-semibold text-text uppercase tracking-[0.08em] font-mono">Credentials</h2>
               <button
                 onClick={() => setModal({ mode: 'add' })}
                 className="btn-primary-sm"
@@ -227,7 +228,7 @@ export function AIProviderPage() {
               ))}
             </div>
           </section>
-        </div>
+        </Container>
 
         {/* ============== Default workspace credentials ============== */}
         <WorkspaceDefaultsSection credentials={credentials} />
@@ -332,7 +333,7 @@ function WorkspaceDefaultsSection({ credentials }: { credentials: CredentialSumm
   }
 
   return (
-    <section className="max-w-[1100px] mx-auto mt-6">
+    <Container as="section" size="default" className="mt-6">
       <div className="rounded-lg border border-border/50 bg-bg-secondary/50 px-4 py-3 mb-4">
         <p className="text-[13px] text-text-muted leading-relaxed">
           Seed a default credential into every <em>new</em> workspace, so you don’t open the
@@ -373,7 +374,7 @@ function WorkspaceDefaultsSection({ credentials }: { credentials: CredentialSumm
           {error && <p className="text-[12px] text-red">{error}</p>}
         </div>
       )}
-    </section>
+    </Container>
   )
 }
 
@@ -477,9 +478,9 @@ function CredentialModal({ mode, cred, presets, onClose, onSaved }: {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-bg border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-[15px] font-semibold text-text">{title}</h2>
-          <button onClick={onClose} className="text-text-muted hover:text-text transition-colors">
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
+          <h2 className="min-w-0 text-[15px] font-semibold text-text [overflow-wrap:anywhere]">{title}</h2>
+          <button onClick={onClose} className="shrink-0 text-text-muted hover:text-text transition-colors">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
@@ -501,13 +502,13 @@ function CredentialModal({ mode, cred, presets, onClose, onSaved }: {
           ) : (
             <>
               {/* Provider header with a change link (add mode) */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-baseline gap-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <div className="flex min-w-0 flex-1 basis-[14rem] flex-wrap items-baseline gap-x-2">
                   <span className="text-[13px] font-semibold text-text">{preset.label}</span>
                   <span className="text-[11px] text-text-muted">{preset.description}</span>
                 </div>
                 {mode === 'add' && (
-                  <button onClick={() => { setPreset(null); gate.reset() }} className="text-[11px] text-accent hover:underline">change</button>
+                  <button onClick={() => { setPreset(null); gate.reset() }} className="shrink-0 text-[11px] text-accent hover:underline">change</button>
                 )}
               </div>
 

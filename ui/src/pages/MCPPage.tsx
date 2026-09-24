@@ -12,6 +12,7 @@
 import { useConfigPage } from '../hooks/useConfigPage'
 import { SaveIndicator } from '../components/SaveIndicator'
 import { ConfigSection, Field, inputClass } from '../components/form'
+import { Container } from '../components/layout/Container'
 import { PageHeader } from '../components/PageHeader'
 import type { AppConfig, McpConfig } from '../api'
 
@@ -29,9 +30,9 @@ export function MCPPage() {
         right={<SaveIndicator status={status} onRetry={retry} />}
       />
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-5">
-        {config && (
-          <div className="max-w-[880px] mx-auto">
+      <div className="flex-1 overflow-y-auto py-5">
+        <Container size="form">
+          {config && (
             <ConfigSection
               title="HTTP Server"
               description="Listening port for the streamable-HTTP MCP endpoint (path: /mcp)."
@@ -45,9 +46,9 @@ export function MCPPage() {
                 />
               </Field>
             </ConfigSection>
-          </div>
-        )}
-        {loadError && <p className="text-[13px] text-red">Failed to load configuration.</p>}
+          )}
+          {loadError && <p className="text-[13px] text-red">Failed to load configuration.</p>}
+        </Container>
       </div>
     </div>
   )

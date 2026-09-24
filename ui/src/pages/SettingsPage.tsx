@@ -5,7 +5,10 @@ import { Toggle } from '../components/Toggle'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { SaveIndicator } from '../components/SaveIndicator'
 import { ConfigSection, Field, inputClass } from '../components/form'
+import { Container } from '../components/layout/Container'
+import { SnapshotSettings } from '../components/SnapshotSettings'
 import { useAutoSave } from '../hooks/useAutoSave'
+import { useFilterEnum } from '../hooks/useFilterParam'
 import { PageHeader } from '../components/PageHeader'
 import { PageLoading, EmptyState } from '../components/StateViews'
 import { useTranslation } from 'react-i18next'
@@ -20,8 +23,8 @@ function AppearanceSection() {
   const setShowEditorTabs = useEditorTabsPref((s) => s.setShowEditorTabs)
   return (
     <ConfigSection title={t('settings.appearance.title')} description={t('settings.appearance.description')}>
-      <div className="flex items-center justify-between gap-4 py-1">
-        <div className="flex-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-1">
+        <div className="min-w-0 flex-1 basis-[16rem]">
           <span className="text-sm font-medium text-text">
             {t('settings.appearance.showEditorTabs')}
           </span>
@@ -45,7 +48,7 @@ function LanguageSection() {
   const setLocale = useSetLocale()
   return (
     <ConfigSection title={t('settings.language.title')} description={t('settings.language.description')}>
-      <div className="flex gap-2 py-1">
+      <div className="flex flex-wrap gap-2 py-1">
         {(['en', 'zh', 'ja', 'zh-Hant'] as const).map((l) => (
           <button
             key={l}
@@ -98,8 +101,8 @@ function AiTradingToggle({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-4 py-1">
-        <div className="flex-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-1">
+        <div className="min-w-0 flex-1 basis-[16rem]">
           <span className="text-sm font-medium text-text">{t('settings.agent.allowAiTrading')}</span>
           <p className="text-[12px] text-text-muted mt-0.5 leading-relaxed">
             {enabled ? t('settings.agent.allowAiTradingOn') : t('settings.agent.allowAiTradingOff')}
@@ -143,7 +146,7 @@ function SettingsSection() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-[880px] mx-auto">
+      <Container size="form">
         {/* Appearance */}
         <AppearanceSection />
 
@@ -155,6 +158,22 @@ function SettingsSection() {
           <AiTradingToggle config={config} setConfig={setConfig} />
         </ConfigSection>
 
+        {/*
+          Baris ini dulu duduk di halaman Portfolio, persis di bawah grafik
+          equity, dan bertahun-tahun dikira menyaring grafiknya. Padahal dia
+          menulis konfigurasi server. Di sini dia duduk di antara setelan
+          perilaku lain, dan penjelas ConfigSection yang meluruskan salah
+          pahamnya. Config-nya sudah dipegang halaman ini, jadi `initial`
+          diisi supaya komponennya tidak fetch lagi. Indikator simpan sudah
+          ada di dalam komponen, jangan ditambah dari sini.
+        */}
+        <ConfigSection
+          title={t('settings.snapshot.title')}
+          description={t('settings.snapshot.description')}
+        >
+          <SnapshotSettings initial={config.snapshot} />
+        </ConfigSection>
+
         {/* Persona */}
         <ConfigSection title={t('settings.persona.title')} description={t('settings.persona.description')}>
           <PersonaEditor />
@@ -164,7 +183,7 @@ function SettingsSection() {
         <ConfigSection title={t('settings.compaction.title')} description={t('settings.compaction.description')}>
           <CompactionForm config={config} />
         </ConfigSection>
-      </div>
+      </Container>
     </div>
   )
 }
@@ -372,9 +391,9 @@ function ToolsSection() {
       ) : groups.length === 0 ? (
         <EmptyState title={t('settings.tools.emptyTitle')} description={t('settings.tools.emptyDescription')} />
       ) : (
-        <div className="max-w-[880px] mx-auto">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-[13px] text-text-muted">
+        <Container size="form">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4">
+            <p className="min-w-0 flex-1 basis-[16rem] text-[13px] text-text-muted">
               {t('settings.tools.summary', { tools: inventory.length, groups: groups.length })}
             </p>
             <SaveIndicator status={status} onRetry={retry} />
@@ -393,7 +412,7 @@ function ToolsSection() {
               />
             ))}
           </div>
-        </div>
+        </Container>
       )}
     </div>
   )
@@ -497,34 +516,44 @@ const TABS: { key: Tab; labelKey: 'settings.tab.settings' | 'settings.tab.tools'
   { key: 'tools', labelKey: 'settings.tab.tools' },
 ]
 
+const TAB_KEYS = TABS.map((item) => item.key)
+
 export function SettingsPage() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<Tab>('settings')
+  // Di telepon TabHost membongkar tab yang tidak aktif, jadi `useState` di sini
+  // artinya pengguna selalu dilempar balik ke "Settings" tiap kali mampir ke
+  // tab lain. Nilainya pindah ke URL supaya selamat. Ruangnya disamakan dengan
+  // `filterScope` untuk spec settings/general.
+  const [tab, setTab] = useFilterEnum<Tab>('tab', TAB_KEYS, 'settings', {
+    scope: 'settings.general',
+  })
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader title={t('settings.title')} />
 
-      <div className="px-4 md:px-6 border-b border-border/60">
-        <div className="flex gap-1">
-          {TABS.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setTab(item.key)}
-              className={`px-3 py-2 text-sm font-medium transition-colors relative ${
-                tab === item.key ? 'text-accent' : 'text-text-muted hover:text-text'
-              }`}
-            >
-              {t(item.labelKey)}
-              {tab === item.key && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent rounded-t" />
-              )}
-            </button>
-          ))}
-        </div>
+      <div className="border-b border-border/60">
+        <Container size="full">
+          <div className="flex flex-wrap gap-1">
+            {TABS.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setTab(item.key)}
+                className={`px-3 py-2 text-sm font-medium transition-colors relative ${
+                  tab === item.key ? 'text-accent' : 'text-text-muted hover:text-text'
+                }`}
+              >
+                {t(item.labelKey)}
+                {tab === item.key && (
+                  <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent rounded-t" />
+                )}
+              </button>
+            ))}
+          </div>
+        </Container>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 px-4 md:px-8 py-6">
+      <div className="flex-1 flex flex-col min-h-0 py-6">
         <div className="flex-1 min-h-0">
           {tab === 'settings' ? <SettingsSection /> : <ToolsSection />}
         </div>

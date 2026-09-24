@@ -19,7 +19,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (state === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg">
+      // `dvh`, bukan `screen`. `100vh` di iOS Safari itu tinggi saat bar URL
+      // tersembunyi, jadi isi yang dipusatkan tergeser ke bawah lipatan.
+      <div className="min-h-dvh flex items-center justify-center bg-bg">
         <div className="text-[12px] text-text-muted">{t('common.loading')}</div>
       </div>
     )

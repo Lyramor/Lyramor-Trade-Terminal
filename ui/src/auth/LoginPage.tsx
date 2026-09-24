@@ -62,8 +62,13 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg px-4">
-      <div className="w-full max-w-[400px] rounded-lg border border-border bg-surface px-6 py-7 shadow-sm">
+    // `min-h-dvh`, bukan `min-h-screen`: di iOS Safari `100vh` itu tinggi
+    // saat bar URL tersembunyi, jadi kartunya terpusat terhadap kotak yang
+    // lebih tinggi dari yang benar-benar kelihatan dan tombol Sign in jatuh
+    // ke bawah lipatan. `my-auto` + `py-10` supaya waktu papan ketik naik
+    // dan ruangnya jadi sempit, kartunya masih bisa digulir, tidak terpotong.
+    <div className="min-h-dvh overflow-y-auto flex items-center justify-center bg-bg px-4 py-10">
+      <div className="my-auto w-full max-w-[400px] rounded-lg border border-border bg-surface px-6 py-7 shadow-sm">
         <h1 className="text-[18px] font-semibold text-text mb-1">{t('auth.heading')}</h1>
         <p className="text-[12px] text-text-muted leading-relaxed mb-5">
           {t('auth.instruction')}
@@ -78,6 +83,13 @@ export function LoginPage() {
               ref={inputRef}
               type="text"
               autoComplete="username"
+              // Papan ketik telepon bawaannya mengapitalkan huruf pertama dan
+              // mengoreksi ejaan. Untuk nama pengguna itu bikin gagal masuk
+              // berkali-kali tanpa pengguna sadar kenapa, dan backend-nya
+              // menghitung itu sebagai percobaan gagal menuju penguncian.
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={busy || locked}
@@ -143,8 +155,8 @@ export function LoginPage() {
 export function NoTokenPage() {
   const { t } = useTranslation()
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg px-4">
-      <div className="w-full max-w-[460px] rounded-lg border border-border bg-surface px-6 py-7">
+    <div className="min-h-dvh overflow-y-auto flex items-center justify-center bg-bg px-4 py-10">
+      <div className="my-auto w-full max-w-[460px] rounded-lg border border-border bg-surface px-6 py-7">
         <h1 className="text-[18px] font-semibold text-text mb-2">{t('auth.noTokenHeading')}</h1>
         <p className="text-[13px] text-text leading-relaxed mb-3">
           The backend did not generate <code className="font-mono">data/config/auth.json</code>.

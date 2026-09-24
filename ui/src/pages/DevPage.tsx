@@ -13,6 +13,11 @@ import {
 } from '../api/tools'
 import { api, type UTASnapshotSummary } from '../api'
 import type { ViewSpec } from '../tabs/types'
+import { Container } from '../components/layout/Container'
+import { TableScroll } from '../components/layout/TableScroll'
+import { Toolbar, ToolbarGroup } from '../components/layout/Toolbar'
+import { FilterSelect } from '../components/filters/FilterSelect'
+import { useFilterParam } from '../hooks/useFilterParam'
 
 // ==================== Tab Types ====================
 
@@ -52,84 +57,132 @@ export function DevPage({ spec }: DevPageProps) {
 
 // ==================== Snapshots Tab ====================
 
+const SNAPSHOTS_SCOPE = 'dev.snapshots'
+
+/**
+ * Satu baris tabel beserta akun asalnya.
+ *
+ * `utaId` sengaja dibawa dari permintaan yang menghasilkan baris ini, bukan
+ * diambil dari `snapshot.accountId`. Keduanya belum tentu sama nilainya, dan
+ * yang dipakai endpoint hapus adalah id UTA-nya.
+ */
+interface SnapshotRowData {
+  utaId: string
+  snapshot: UTASnapshotSummary
+}
+
 function SnapshotsTab() {
   const toast = useToast()
   const [accounts, setAccounts] = useState<Array<{ id: string; label: string }>>([])
-  const [selectedAccount, setSelectedAccount] = useState<string>('')
-  const [snapshots, setSnapshots] = useState<UTASnapshotSummary[]>([])
+  const [rows, setRows] = useState<SnapshotRowData[]>([])
   const [loading, setLoading] = useState(false)
-  const [expandedIdx, setExpandedIdx] = useState<number | null>(null)
+  const [expandedKey, setExpandedKey] = useState<string | null>(null)
 
-  // Load accounts list
+  // String kosong berarti semua akun. Dulu pilihan itu tidak ada sama sekali:
+  // akun pertama dipilih diam-diam, dan kalau daftar akunnya kosong select-nya
+  // ikut kosong tanpa satu pun tulisan yang menjelaskan kenapa.
+  const [account, setAccount] = useFilterParam('account', '', { scope: SNAPSHOTS_SCOPE })
+
   useEffect(() => {
+    let cancelled = false
     api.trading.listUTAs().then(r => {
-      const list = r.utas.map(a => ({ id: a.id, label: a.label }))
-      setAccounts(list)
-      if (list.length > 0 && !selectedAccount) setSelectedAccount(list[0].id)
+      if (cancelled) return
+      setAccounts(r.utas.map(a => ({ id: a.id, label: a.label })))
     }).catch(() => {})
+    return () => { cancelled = true }
   }, [])
 
-  // Load snapshots when account changes
+  const accountOptions = useMemo(
+    () => accounts.map(a => ({ value: a.id, label: `${a.label} (${a.id})` })),
+    [accounts],
+  )
+
   const loadSnapshots = useCallback(async () => {
-    if (!selectedAccount) return
-    setLoading(true)
-    setExpandedIdx(null)
-    try {
-      const r = await api.trading.snapshots(selectedAccount, { limit: 200 })
-      setSnapshots(r.snapshots)
-    } catch {
-      setSnapshots([])
+    const targets = account ? [account] : accounts.map(a => a.id)
+    if (targets.length === 0) {
+      setRows([])
+      return
     }
-    setLoading(false)
-  }, [selectedAccount])
+    setLoading(true)
+    setExpandedKey(null)
+    try {
+      const perAccount = await Promise.all(targets.map(async (utaId) => {
+        try {
+          const r = await api.trading.snapshots(utaId, { limit: 200 })
+          return r.snapshots.map((snapshot) => ({ utaId, snapshot }))
+        } catch {
+          // Satu akun yang gagal tidak boleh mengosongkan tabel akun lain.
+          return [] as SnapshotRowData[]
+        }
+      }))
+      const merged = perAccount.flat()
+      // Urutan bawaan server dibiarkan apa adanya untuk satu akun. Baru saat
+      // beberapa akun digabung, barisnya perlu diurutkan supaya campurannya
+      // tidak terbaca acak. Timestamp ISO aman diurutkan sebagai string.
+      if (targets.length > 1) {
+        merged.sort((a, b) => b.snapshot.timestamp.localeCompare(a.snapshot.timestamp))
+      }
+      setRows(merged)
+    } finally {
+      setLoading(false)
+    }
+  }, [account, accounts])
 
   useEffect(() => { loadSnapshots() }, [loadSnapshots])
 
-  const handleDelete = async (timestamp: string) => {
+  const handleDelete = async (utaId: string, timestamp: string) => {
     try {
-      await api.trading.deleteSnapshot(selectedAccount, timestamp)
+      await api.trading.deleteSnapshot(utaId, timestamp)
       toast.success('Snapshot deleted')
-      setExpandedIdx(null)
+      setExpandedKey(null)
       await loadSnapshots()
     } catch {
       toast.error('Failed to delete snapshot')
     }
   }
 
-  return (
-    <div className="px-4 md:px-6 py-5">
-      <div className="max-w-[900px] space-y-4">
-        {/* Account selector */}
-        <div className="flex items-center gap-3">
-          <label className="text-[13px] text-text-muted">Account:</label>
-          <select
-            value={selectedAccount}
-            onChange={e => setSelectedAccount(e.target.value)}
-            className="text-[13px] px-2 py-1.5 rounded-md border border-border bg-bg text-text"
-          >
-            {accounts.map(a => (
-              <option key={a.id} value={a.id}>{a.label} ({a.id})</option>
-            ))}
-          </select>
-          <button
-            onClick={loadSnapshots}
-            className="text-[13px] px-2.5 py-1.5 rounded-md border border-border hover:bg-bg-tertiary transition-colors text-text-muted"
-          >
-            Refresh
-          </button>
-          <span className="text-[11px] text-text-muted/50">{snapshots.length} snapshots</span>
-        </div>
+  // Kolom akun cuma berguna waktu barisnya campuran dari beberapa akun.
+  const showAccountColumn = !account && accounts.length > 1
+  const columnCount = showAccountColumn ? 7 : 6
 
-        {/* Snapshots table */}
+  return (
+    <Container size="default" className="py-5">
+      <div className="space-y-4">
+        <Toolbar ariaLabel="Snapshot filters">
+          <ToolbarGroup>
+            <FilterSelect
+              options={accountOptions}
+              value={account}
+              onChange={setAccount}
+              label="Account"
+              allLabel="All accounts"
+              emptyLabel="No accounts available"
+            />
+          </ToolbarGroup>
+
+          <ToolbarGroup>
+            <button
+              onClick={loadSnapshots}
+              className="shrink-0 cursor-pointer text-[13px] px-2.5 py-1.5 rounded-md border border-border hover:bg-bg-tertiary transition-colors text-text-muted"
+            >
+              Refresh
+            </button>
+            <span className="text-[11px] text-text-muted/50">{rows.length} snapshots</span>
+          </ToolbarGroup>
+        </Toolbar>
+
         {loading ? (
           <div className="flex justify-center py-10"><Spinner size="sm" /></div>
-        ) : snapshots.length === 0 ? (
-          <EmptyState title="No snapshots for this account." />
+        ) : accounts.length === 0 ? (
+          <EmptyState title="No trading account configured yet." />
+        ) : rows.length === 0 ? (
+          <EmptyState title={account ? 'No snapshots for this account.' : 'No snapshots yet.'} />
         ) : (
-          <div className="border border-border rounded-lg overflow-hidden">
+          <TableScroll label="Snapshots">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="bg-bg-secondary text-text-muted text-left text-[11px] uppercase tracking-wide">
+                  {showAccountColumn && <th className="px-3 py-2 font-medium">Account</th>}
                   <th className="px-3 py-2 font-medium">Timestamp</th>
                   <th className="px-3 py-2 font-medium">Trigger</th>
                   <th className="px-3 py-2 font-medium text-center">Health</th>
@@ -139,26 +192,34 @@ function SnapshotsTab() {
                 </tr>
               </thead>
               <tbody>
-                {snapshots.map((s, i) => (
-                  <SnapshotRow
-                    key={s.timestamp}
-                    snapshot={s}
-                    expanded={expandedIdx === i}
-                    onToggle={() => setExpandedIdx(expandedIdx === i ? null : i)}
-                    onDelete={() => handleDelete(s.timestamp)}
-                  />
-                ))}
+                {rows.map((row) => {
+                  const key = `${row.utaId}|${row.snapshot.timestamp}`
+                  return (
+                    <SnapshotRow
+                      key={key}
+                      snapshot={row.snapshot}
+                      utaId={showAccountColumn ? row.utaId : null}
+                      columnCount={columnCount}
+                      expanded={expandedKey === key}
+                      onToggle={() => setExpandedKey(expandedKey === key ? null : key)}
+                      onDelete={() => handleDelete(row.utaId, row.snapshot.timestamp)}
+                    />
+                  )
+                })}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         )}
       </div>
-    </div>
+    </Container>
   )
 }
 
-function SnapshotRow({ snapshot: s, expanded, onToggle, onDelete }: {
+function SnapshotRow({ snapshot: s, utaId, columnCount, expanded, onToggle, onDelete }: {
   snapshot: UTASnapshotSummary
+  /** Diisi hanya saat kolom akun ditampilkan. */
+  utaId: string | null
+  columnCount: number
   expanded: boolean
   onToggle: () => void
   onDelete: () => void
@@ -172,7 +233,10 @@ function SnapshotRow({ snapshot: s, expanded, onToggle, onDelete }: {
         className="border-t border-border hover:bg-bg-tertiary/30 transition-colors cursor-pointer"
         onClick={onToggle}
       >
-        <td className="px-3 py-2 font-mono text-[11px] text-text">
+        {utaId !== null && (
+          <td className="px-3 py-2 font-mono text-[11px] text-text-muted whitespace-nowrap">{utaId}</td>
+        )}
+        <td className="px-3 py-2 font-mono text-[11px] text-text whitespace-nowrap">
           {new Date(s.timestamp).toLocaleString()}
         </td>
         <td className="px-3 py-2">
@@ -207,17 +271,22 @@ function SnapshotRow({ snapshot: s, expanded, onToggle, onDelete }: {
       </tr>
       {expanded && (
         <tr className="border-t border-border/50">
-          <td colSpan={6} className="px-3 py-3 bg-bg-secondary/50">
+          <td colSpan={columnCount} className="px-3 py-3 bg-bg-secondary/50">
             <div className="space-y-2">
               {/* Account metrics */}
-              <div className="flex gap-4 text-[11px]">
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
                 <span className="text-text-muted">Cash: <span className="text-text">${Number(s.account.totalCashValue).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2 })}</span></span>
                 <span className="text-text-muted">Unrealized PnL: <span className={Number(s.account.unrealizedPnL) >= 0 ? 'text-green' : 'text-red'}>{Number(s.account.unrealizedPnL) >= 0 ? '+' : ''}${Number(s.account.unrealizedPnL).toLocaleString(getIntlLocale(), { minimumFractionDigits: 2 })}</span></span>
                 {s.account.baseCurrency && <span className="text-text-muted">Base: <span className="text-text">{s.account.baseCurrency}</span></span>}
               </div>
               {/* Positions detail */}
               {s.positions.length > 0 && (
-                <table className="w-full text-[11px]">
+                // Tujuh kolom angka di dalam baris yang sudah melebar sendiri.
+                // Tanpa pembungkus geser, kolom PnL tidak pernah terlihat di
+                // telepon. Bingkainya dimatikan karena blok ini sudah duduk di
+                // dalam baris yang punya latar sendiri.
+                <TableScroll label="Snapshot positions" bordered={false}>
+                <table className="w-full text-[11px] min-w-[520px]">
                   <thead>
                     <tr className="text-text-muted text-left">
                       <th className="pr-3 pb-1 font-medium">Symbol</th>
@@ -249,6 +318,7 @@ function SnapshotRow({ snapshot: s, expanded, onToggle, onDelete }: {
                     })}
                   </tbody>
                 </table>
+                </TableScroll>
               )}
               {s.positions.length === 0 && (
                 <p className="text-[11px] text-text-muted">No positions in this snapshot.</p>
@@ -263,14 +333,19 @@ function SnapshotRow({ snapshot: s, expanded, onToggle, onDelete }: {
 
 // ==================== Tools Tab ====================
 
+const TOOLS_SCOPE = 'dev.tools'
+
 function ToolsTab() {
   const [inventory, setInventory] = useState<ToolInfo[]>([])
-  const [selected, setSelected] = useState<string | null>(null)
   const [detail, setDetail] = useState<ToolDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
-  const [filter, setFilter] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [result, setResult] = useState<{ name: string; data: ExecuteResult; durationMs: number } | null>(null)
+  // Daftar alat jadi laci yang bisa ditutup di layar sempit.
+  const [listOpen, setListOpen] = useState(false)
+
+  const [filter, setFilter] = useFilterParam('q', '', { scope: TOOLS_SCOPE })
+  const [selected, setSelected] = useFilterParam('tool', '', { scope: TOOLS_SCOPE })
 
   useEffect(() => {
     toolsApi.load().then((r) => {
@@ -295,6 +370,45 @@ function ToolsTab() {
     return map
   }, [inventory, filter])
 
+  // Buka grup yang mengandung hasil begitu ada kata kunci.
+  //
+  // Sebelumnya `expandedGroups` cuma diisi sekali waktu inventaris datang,
+  // jadi grup yang pernah ditutup pengguna tetap tertutup walaupun satu-satunya
+  // hasil pencarian ada di dalamnya. Yang terlihat: mengetik apa pun seolah
+  // tidak menemukan apa-apa, padahal hasilnya cuma terlipat.
+  //
+  // Ini menulis ke state betulan, bukan menimpa tampilan, supaya pengguna tetap
+  // bisa melipat grup lagi selagi mencari. Mengetik lagi membukanya kembali.
+  useEffect(() => {
+    if (!filter.trim()) return
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      let grew = false
+      for (const group of grouped.keys()) {
+        if (next.has(group)) continue
+        next.add(group)
+        grew = true
+      }
+      return grew ? next : prev
+    })
+  }, [filter, grouped])
+
+  // Alat yang sedang dibuka ikut tersimpan di URL, jadi detailnya dimuat dari
+  // nama itu, bukan dari klik. Efeknya: pilihan selamat saat pindah tab.
+  useEffect(() => {
+    if (!selected) {
+      setDetail(null)
+      return
+    }
+    let cancelled = false
+    setLoadingDetail(true)
+    toolsApi.detail(selected)
+      .then((d) => { if (!cancelled) setDetail(d) })
+      .catch(() => { if (!cancelled) setDetail(null) })
+      .finally(() => { if (!cancelled) setLoadingDetail(false) })
+    return () => { cancelled = true }
+  }, [selected])
+
   const toggleGroup = useCallback((group: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev)
@@ -304,78 +418,111 @@ function ToolsTab() {
     })
   }, [])
 
-  const selectTool = useCallback(async (name: string) => {
+  const selectTool = useCallback((name: string) => {
     setSelected(name)
-    setLoadingDetail(true)
-    try {
-      const d = await toolsApi.detail(name)
-      setDetail(d)
-    } catch {
-      setDetail(null)
-    } finally {
-      setLoadingDetail(false)
-    }
-  }, [])
+    setListOpen(false)
+  }, [setSelected])
 
   return (
-    <div className="flex flex-1 min-h-0">
-      {/* Left: Tool list */}
-      <div className="w-[280px] border-r border-border/60 flex flex-col min-h-0">
+    <div className="relative flex flex-1 min-h-0">
+      {/* Latar gelap di belakang laci, telepon saja. */}
+      <div
+        aria-hidden="true"
+        onClick={() => setListOpen(false)}
+        className={`absolute inset-0 z-20 bg-black/50 md:hidden transition-opacity duration-200 ${
+          listOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      />
+
+      {/* Daftar alat. Di bawah 768px dia laci yang meluncur di atas panel
+          detail; di atas itu kolom biasa yang menempel kiri. `bg-bg` dipasang
+          khusus mode laci karena isi di belakangnya tidak boleh menembus. */}
+      <aside
+        aria-label="Tool list"
+        className={`
+          w-[280px] max-w-[85vw] md:w-[240px] shrink-0 flex flex-col min-h-0
+          border-r border-border/60 bg-bg
+          absolute top-0 bottom-0 left-0 z-30 transition-transform duration-200
+          ${listOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:static md:translate-x-0 md:z-auto md:bg-transparent md:transition-none
+        `}
+      >
         <div className="px-3 py-3">
           <input
             type="text"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter tools..."
+            aria-label="Filter tools"
             className="w-full px-2.5 py-1.5 bg-bg text-text border border-border rounded-md text-xs outline-none focus:border-accent"
           />
         </div>
         <div className="flex-1 overflow-y-auto px-1 pb-3">
-          {[...grouped.entries()].map(([group, tools]) => (
-            <div key={group} className="mb-1">
-              <button
-                onClick={() => toggleGroup(group)}
-                className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-text-muted hover:text-text transition-colors"
-              >
-                <span className="text-[10px]">{expandedGroups.has(group) ? '\u25BC' : '\u25B6'}</span>
-                <span className="font-semibold uppercase tracking-wider">{group}</span>
-                <span className="text-text-muted/50">({tools.length})</span>
-              </button>
-              {expandedGroups.has(group) && (
-                <div className="ml-2">
-                  {tools.map((t) => (
-                    <button
-                      key={t.name}
-                      onClick={() => selectTool(t.name)}
-                      className={`w-full text-left px-2 py-1 text-xs rounded transition-colors ${
-                        selected === t.name
-                          ? 'bg-accent/10 text-accent'
-                          : 'text-text hover:bg-bg-tertiary/50'
-                      }`}
-                    >
-                      {t.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          {grouped.size === 0 ? (
+            <p className="px-2 py-3 text-xs text-text-muted">No tool matches that filter.</p>
+          ) : (
+            [...grouped.entries()].map(([group, tools]) => (
+              <div key={group} className="mb-1">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group)}
+                  aria-expanded={expandedGroups.has(group)}
+                  className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-text-muted hover:text-text transition-colors cursor-pointer"
+                >
+                  <span className="text-[10px]">{expandedGroups.has(group) ? '\u25BC' : '\u25B6'}</span>
+                  <span className="font-semibold uppercase tracking-wider">{group}</span>
+                  <span className="text-text-muted/50">({tools.length})</span>
+                </button>
+                {expandedGroups.has(group) && (
+                  <div className="ml-2">
+                    {tools.map((t) => (
+                      <button
+                        key={t.name}
+                        type="button"
+                        onClick={() => selectTool(t.name)}
+                        className={`w-full text-left px-2 py-1 text-xs rounded transition-colors cursor-pointer ${
+                          selected === t.name
+                            ? 'bg-accent/10 text-accent'
+                            : 'text-text hover:bg-bg-tertiary/50'
+                        }`}
+                      >
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
-      </div>
+      </aside>
 
-      {/* Right: Detail + Execute + Result (independent scroll) */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4">
-        {!selected ? (
-          <div className="flex items-center justify-center h-full text-text-muted text-sm">
-            Select a tool from the left panel.
-          </div>
-        ) : loadingDetail ? (
-          <div className="flex justify-center py-10"><Spinner size="sm" /></div>
-        ) : detail ? (
-          <ToolExecutePanel detail={detail} result={result} onResult={setResult} />
-        ) : (
-          <p className="text-sm text-text-muted">Failed to load tool details.</p>
-        )}
+      {/* Kanan: detail + eksekusi + hasil, punya geser sendiri. */}
+      <div className="flex flex-1 flex-col min-h-0">
+        <div className="md:hidden shrink-0 border-b border-border/60 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setListOpen(true)}
+            aria-expanded={listOpen}
+            className="cursor-pointer rounded-md border border-border px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:bg-bg-tertiary"
+          >
+            {selected ? `Tools: ${selected}` : 'Browse tools'}
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4">
+          {!selected ? (
+            <div className="flex items-center justify-center h-full text-text-muted text-sm text-center">
+              Select a tool from the list.
+            </div>
+          ) : loadingDetail ? (
+            <div className="flex justify-center py-10"><Spinner size="sm" /></div>
+          ) : detail ? (
+            <ToolExecutePanel detail={detail} result={result} onResult={setResult} />
+          ) : (
+            <p className="text-sm text-text-muted">Failed to load tool details.</p>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Section } from '../../components/form'
+import { TableScroll } from '../../components/layout/TableScroll'
 import { simulatorApi, type SimulatorState } from '../../api/simulator'
 
 const inputClass =
@@ -112,42 +113,45 @@ export function MarkPrices({ utaId, state, run, loading }: {
       description="Per-symbol mark price. Editing or ticking auto-matches any pending limit/stop order whose trigger the new price crosses. Focus a price input and press ↑/↓ for ±1%, Shift+↑/↓ for ±5%."
     >
       <div className="space-y-1">
+        {/* Kolom Quick berisi empat tombol persen; totalnya lewat lebar telepon. */}
         {state.markPrices.length === 0 ? (
           <p className="text-xs text-text-muted">No prices set yet — add one below.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-text-muted text-xs">
-                <th className="pb-1 pr-3">Symbol</th>
-                <th className="pb-1 pr-3 w-40">Price</th>
-                <th className="pb-1 text-right">Quick</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.markPrices.map((m) => (
-                <tr
-                  key={m.nativeKey}
-                  className={`text-text transition-colors duration-500 ${flashClass(m.nativeKey)}`}
-                >
-                  <td className="py-1 pr-3 font-mono text-xs">{m.nativeKey}</td>
-                  <td className="py-1 pr-3">
-                    <input
-                      className={inputClass}
-                      value={drafts[m.nativeKey] ?? m.price}
-                      onChange={(e) => setDrafts({ ...drafts, [m.nativeKey]: e.target.value })}
-                      onKeyDown={(e) => handleKeyDown(e, m.nativeKey)}
-                    />
-                  </td>
-                  <td className="py-1 text-right space-x-1">
-                    <button disabled={loading} onClick={() => tick(m.nativeKey, -5)} className="btn-secondary-xs">−5%</button>
-                    <button disabled={loading} onClick={() => tick(m.nativeKey, -1)} className="btn-secondary-xs">−1%</button>
-                    <button disabled={loading} onClick={() => tick(m.nativeKey, 1)} className="btn-secondary-xs">+1%</button>
-                    <button disabled={loading} onClick={() => tick(m.nativeKey, 5)} className="btn-secondary-xs">+5%</button>
-                  </td>
+          <TableScroll label="Simulator mark prices" bordered={false}>
+            <table className="w-full text-sm min-w-[420px]">
+              <thead>
+                <tr className="text-left text-text-muted text-xs">
+                  <th className="pb-1 pr-3">Symbol</th>
+                  <th className="pb-1 pr-3 w-40">Price</th>
+                  <th className="pb-1 text-right">Quick</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {state.markPrices.map((m) => (
+                  <tr
+                    key={m.nativeKey}
+                    className={`text-text transition-colors duration-500 ${flashClass(m.nativeKey)}`}
+                  >
+                    <td className="py-1 pr-3 font-mono text-xs">{m.nativeKey}</td>
+                    <td className="py-1 pr-3">
+                      <input
+                        className={inputClass}
+                        value={drafts[m.nativeKey] ?? m.price}
+                        onChange={(e) => setDrafts({ ...drafts, [m.nativeKey]: e.target.value })}
+                        onKeyDown={(e) => handleKeyDown(e, m.nativeKey)}
+                      />
+                    </td>
+                    <td className="py-1 text-right space-x-1">
+                      <button disabled={loading} onClick={() => tick(m.nativeKey, -5)} className="btn-secondary-xs">−5%</button>
+                      <button disabled={loading} onClick={() => tick(m.nativeKey, -1)} className="btn-secondary-xs">−1%</button>
+                      <button disabled={loading} onClick={() => tick(m.nativeKey, 1)} className="btn-secondary-xs">+1%</button>
+                      <button disabled={loading} onClick={() => tick(m.nativeKey, 5)} className="btn-secondary-xs">+5%</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
         )}
 
         <div className="flex items-center gap-2 pt-3 border-t border-border">

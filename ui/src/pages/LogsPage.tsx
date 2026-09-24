@@ -1,6 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { api, type EventLogEntry, type ToolCallRecord } from '../api'
+import { toolsApi } from '../api/tools'
 import { getIntlLocale } from '../lib/intl'
+import { Container } from '../components/layout/Container'
+import { TableScroll } from '../components/layout/TableScroll'
+import { Toolbar, ToolbarGroup } from '../components/layout/Toolbar'
+import { FilterSelect, useOptionUniverse, type FilterOption } from '../components/filters/FilterSelect'
+import {
+  useFilterEnum,
+  useFilterFlag,
+  useFilterNumber,
+  useFilterParam,
+  useFilterParamWriter,
+} from '../hooks/useFilterParam'
 
 // ==================== Helpers ====================
 
@@ -37,22 +49,118 @@ function formatOutput(output: string): string {
   }
 }
 
+/** Nama mentah jadi daftar option. Urutannya sudah diurus universe-nya. */
+function toOptions(values: readonly string[]): FilterOption[] {
+  return values.map((value) => ({ value, label: value }))
+}
+
+/**
+ * Gulung wilayah geser tabel kembali ke atas setelah pindah halaman.
+ *
+ * TableScroll tidak meneruskan ref ke kotak yang benar-benar menggeser, jadi
+ * elemennya dicari lewat `role="region"` yang dipasang komponen itu waktu
+ * `label` diisi. Kalau suatu saat TableScroll punya ref sendiri, ganti ini.
+ */
+function scrollTableToTop(root: HTMLElement | null) {
+  root?.querySelector<HTMLElement>('[role="region"]')?.scrollTo(0, 0)
+}
+
+/**
+ * Pause di sini artinya "hentikan penyegaran otomatis", bukan "bekukan layar".
+ *
+ * Dulu perilakunya setengah-setengah: polling berhenti, tapi mengganti filter
+ * tetap menarik data baru, sementara tombolnya cuma bertuliskan "Pause". Dua
+ * jalan keluar yang masuk akal: mematikan semua kendali selama dijeda, atau
+ * mempersempit arti Pause ke polling saja. Dipilih yang kedua, karena orang
+ * menekan Pause justru supaya bisa membaca dan menyaring tanpa daftarnya
+ * bergeser sendiri di bawah kursor. Kalau filter ikut mati, Pause malah bikin
+ * halaman tidak bisa dipakai.
+ *
+ * Yang berubah: labelnya sekarang menyebut auto-refresh, jadi janjinya sama
+ * dengan yang dikerjakan, dan tooltipnya bilang terang-terangan kalau aksi
+ * eksplisit tetap menarik data.
+ */
+function AutoRefreshToggle({ paused, onChange }: { paused: boolean; onChange: (next: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={paused}
+      title="Refreshes every 3s while running. Changing the filter or the page always fetches on demand, paused or not."
+      onClick={() => onChange(!paused)}
+      className={`shrink-0 cursor-pointer text-xs px-3 py-1.5 rounded-md border transition-colors ${
+        paused
+          ? 'border-notification-border text-notification-border hover:bg-notification-bg'
+          : 'border-border text-text-muted hover:bg-bg-tertiary'
+      }`}
+    >
+      {paused ? 'Resume auto-refresh' : 'Pause auto-refresh'}
+    </button>
+  )
+}
+
+interface PaginationProps {
+  page: number
+  totalPages: number
+  loading: boolean
+  onGo: (page: number) => void
+}
+
+function Pagination({ page, totalPages, loading, onGo }: PaginationProps) {
+  if (totalPages <= 1) return null
+  const cls =
+    'text-xs px-2 py-1 rounded border border-border text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed'
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 shrink-0">
+      <button onClick={() => onGo(1)} disabled={page <= 1 || loading} aria-label="First page" className={cls}>
+        &laquo;&laquo;
+      </button>
+      <button onClick={() => onGo(page - 1)} disabled={page <= 1 || loading} aria-label="Previous page" className={cls}>
+        &laquo;
+      </button>
+      <span className="text-xs text-text-muted px-2">
+        {page} / {totalPages}
+      </span>
+      <button onClick={() => onGo(page + 1)} disabled={page >= totalPages || loading} aria-label="Next page" className={cls}>
+        &raquo;
+      </button>
+      <button onClick={() => onGo(totalPages)} disabled={page >= totalPages || loading} aria-label="Last page" className={cls}>
+        &raquo;&raquo;
+      </button>
+    </div>
+  )
+}
+
 // ==================== EventLog Section ====================
 
 const EVENT_PAGE_SIZE = 100
 
+/**
+ * Sekali di awal, tarik jendela yang jauh lebih lebar dari satu halaman,
+ * khusus untuk mengisi daftar tipe. Sisi server membaca seluruh berkas log
+ * lalu memotongnya, jadi pageSize besar cuma menambah ongkos transfer, bukan
+ * ongkos baca. 500 cukup jauh ke belakang supaya tipe yang jarang muncul
+ * tetap kebagian tempat di dropdown.
+ */
+const TYPE_SAMPLE_SIZE = 500
+
+const EVENTS_SCOPE = 'dev.logs.events'
+
 function EventLogSection() {
   const [entries, setEntries] = useState<EventLogEntry[]>([])
-  const [typeFilter, setTypeFilter] = useState('')
-  const [paused, setPaused] = useState(false)
-  const [page, setPage] = useState(1)
+  const [typeSample, setTypeSample] = useState<string[]>([])
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [types, setTypes] = useState<string[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Fetch a page from disk
+  // Filter tinggal di URL, bukan useState. Di bawah 768px TabHost membongkar
+  // tab yang tidak aktif, jadi state lokal ikut hilang tiap kali pengguna
+  // melirik tab sebelah lalu balik lagi.
+  const [typeFilter] = useFilterParam('type', '', { scope: EVENTS_SCOPE })
+  const [page] = useFilterNumber('page', 1, { scope: EVENTS_SCOPE })
+  const [paused, setPaused] = useFilterFlag('paused', false, { scope: EVENTS_SCOPE })
+  const write = useFilterParamWriter({ scope: EVENTS_SCOPE })
+
   const fetchPage = useCallback(async (p: number, type?: string) => {
     setLoading(true)
     try {
@@ -62,7 +170,6 @@ function EventLogSection() {
         type: type || undefined,
       })
       setEntries(result.entries)
-      setPage(result.page)
       setTotalPages(result.totalPages)
       setTotal(result.total)
     } catch (err) {
@@ -72,143 +179,115 @@ function EventLogSection() {
     }
   }, [])
 
-  // Initial load
-  useEffect(() => { fetchPage(1) }, [fetchPage])
+  // Halaman dan filter sekarang datang dari URL, jadi satu efek ini yang
+  // memuat ulang. Tidak ada lagi fetch yang diselipkan di dalam handler.
+  useEffect(() => { fetchPage(page, typeFilter || undefined) }, [fetchPage, page, typeFilter])
 
-  // Track all seen event types (persists across page changes)
+  // Contoh tanpa filter untuk isi dropdown. Ini yang memutus lingkarannya:
+  // daftar tipe tidak boleh dibangun dari entri yang sedang tersaring.
   useEffect(() => {
-    if (entries.length > 0) {
-      setTypes((prev) => {
-        const next = new Set(prev)
-        for (const e of entries) next.add(e.type)
-        return [...next].sort()
+    let cancelled = false
+    api.events
+      .query({ page: 1, pageSize: TYPE_SAMPLE_SIZE })
+      .then((result) => {
+        if (!cancelled) setTypeSample(result.entries.map((e) => e.type))
       })
-    }
-  }, [entries])
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
-  // Live updates via polling — refetch page 1 every 3s while not paused.
-  // Older pages don't poll (user is browsing history; not jumping back).
-  // Matches ToolCallLogSection's pattern below; the events log doesn't
-  // need sub-second freshness — a 3s gap on a debug screen is fine.
+  // Tipe yang baru muncul setelah halaman dibuka ikut tertangkap dari entri
+  // yang lewat. useOptionUniverse tidak pernah membuang yang sudah tercatat,
+  // jadi memilih satu tipe tidak lagi menghapus tipe lain dari daftar.
+  const seenTypes = useMemo(
+    () => [...typeSample, ...entries.map((e) => e.type)],
+    [typeSample, entries],
+  )
+  const typeUniverse = useOptionUniverse(seenTypes)
+  const typeOptions = useMemo(() => toOptions(typeUniverse), [typeUniverse])
+
+  const handleTypeChange = useCallback((type: string) => {
+    // Dua kunci dalam satu tulisan. Setter terpisah akan saling menimpa
+    // karena keduanya membaca lokasi yang sama dalam satu tick.
+    write({ type: type || null, page: null })
+  }, [write])
+
+  const goToPage = useCallback((p: number) => {
+    write({ page: p === 1 ? null : String(p) })
+    scrollTableToTop(containerRef.current)
+  }, [write])
+
+  // Penyegaran otomatis tiap 3 detik, khusus halaman pertama. Halaman lama
+  // tidak ikut: kalau seseorang sedang menyusuri riwayat, daftarnya tidak
+  // boleh melompat balik ke depan.
   useEffect(() => {
     if (paused || page !== 1) return
-    const interval = setInterval(() => {
-      fetchPage(1, typeFilter || undefined)
-    }, 3000)
+    const interval = setInterval(() => { fetchPage(1, typeFilter || undefined) }, 3000)
     return () => clearInterval(interval)
   }, [paused, page, typeFilter, fetchPage])
 
-  // Type filter change → reset to page 1
-  const handleTypeChange = useCallback((type: string) => {
-    setTypeFilter(type)
-    fetchPage(1, type)
-  }, [fetchPage])
-
-  // Page navigation
-  const goToPage = useCallback((p: number) => {
-    fetchPage(p, typeFilter || undefined)
-    containerRef.current?.scrollTo(0, 0)
-  }, [fetchPage, typeFilter])
-
   return (
     <div className="flex flex-col gap-3 h-full">
-      {/* Controls */}
-      <div className="flex items-center gap-3 shrink-0">
-        <select
-          value={typeFilter}
-          onChange={(e) => handleTypeChange(e.target.value)}
-          className="bg-bg-tertiary text-text text-sm rounded-md border border-border px-2 py-1.5 outline-none focus:border-accent"
-        >
-          <option value="">All types</option>
-          {types.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+      <Toolbar ariaLabel="Event log filters" className="shrink-0">
+        <ToolbarGroup>
+          <FilterSelect
+            options={typeOptions}
+            value={typeFilter}
+            onChange={handleTypeChange}
+            ariaLabel="Event type"
+            allLabel="All types"
+            emptyLabel="No event types yet"
+          />
+        </ToolbarGroup>
 
-        <button
-          onClick={() => setPaused(!paused)}
-          className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${
-            paused
-              ? 'border-notification-border text-notification-border hover:bg-notification-bg'
-              : 'border-border text-text-muted hover:bg-bg-tertiary'
-          }`}
-        >
-          {paused ? '▶ Resume' : '⏸ Pause'}
-        </button>
+        <ToolbarGroup>
+          <AutoRefreshToggle paused={paused} onChange={setPaused} />
+        </ToolbarGroup>
 
-        <span className="text-xs text-text-muted ml-auto">
-          {total > 0
-            ? `Page ${page} of ${totalPages} · ${total} events`
-            : '0 events'
-          }
-          {typeFilter && ' (filtered)'}
-        </span>
-      </div>
-
-      {/* Event list — fills remaining space */}
-      <div
-        ref={containerRef}
-        className="flex-1 min-h-0 bg-bg rounded-lg border border-border overflow-y-auto font-mono text-xs"
-      >
-        {loading && entries.length === 0 ? (
-          <div className="px-4 py-8 text-center text-text-muted">Loading...</div>
-        ) : entries.length === 0 ? (
-          <div className="px-4 py-8 text-center text-text-muted">No events yet</div>
-        ) : (
-          <table className="w-full">
-            <thead className="sticky top-0 bg-bg-secondary">
-              <tr className="text-text-muted text-left">
-                <th className="px-3 py-2 w-12">#</th>
-                <th className="px-3 py-2 w-36">Time</th>
-                <th className="px-3 py-2 w-40">Type</th>
-                <th className="px-3 py-2">Payload</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <EventRow key={entry.seq} entry={entry} />
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Pagination controls */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 shrink-0">
-          <button
-            onClick={() => goToPage(1)}
-            disabled={page <= 1 || loading}
-            className="text-xs px-2 py-1 rounded border border-border text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            ««
-          </button>
-          <button
-            onClick={() => goToPage(page - 1)}
-            disabled={page <= 1 || loading}
-            className="text-xs px-2 py-1 rounded border border-border text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            «
-          </button>
-          <span className="text-xs text-text-muted px-2">
-            {page} / {totalPages}
+        <ToolbarGroup end>
+          <span className="text-xs text-text-muted">
+            {total > 0 ? `Page ${page} of ${totalPages} · ${total} events` : '0 events'}
+            {typeFilter && ' (filtered)'}
           </span>
-          <button
-            onClick={() => goToPage(page + 1)}
-            disabled={page >= totalPages || loading}
-            className="text-xs px-2 py-1 rounded border border-border text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            »
-          </button>
-          <button
-            onClick={() => goToPage(totalPages)}
-            disabled={page >= totalPages || loading}
-            className="text-xs px-2 py-1 rounded border border-border text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            »»
-          </button>
-        </div>
-      )}
+        </ToolbarGroup>
+      </Toolbar>
+
+      {/* Kolom Time dan Type lebarnya dipatok, jadi tanpa geser mendatar
+          kolom Payload tidak pernah kelihatan di telepon. */}
+      {/* `innerClassName="h-full"` menjaga kotak gesernya tetap setinggi induk
+          walau max-height persen tidak sempat terselesaikan tata letak flex. */}
+      <div ref={containerRef} className="flex flex-1 min-h-0">
+        <TableScroll
+          label="Event log"
+          maxHeight="100%"
+          className="flex-1 bg-bg font-mono text-xs"
+          innerClassName="h-full"
+        >
+          {loading && entries.length === 0 ? (
+            <div className="px-4 py-8 text-center text-text-muted">Loading...</div>
+          ) : entries.length === 0 ? (
+            <div className="px-4 py-8 text-center text-text-muted">No events yet</div>
+          ) : (
+            <table className="w-full min-w-[640px]">
+              <thead className="sticky top-0 bg-bg-secondary">
+                <tr className="text-text-muted text-left">
+                  <th className="px-3 py-2 w-12">#</th>
+                  <th className="px-3 py-2 w-36">Time</th>
+                  <th className="px-3 py-2 w-40">Type</th>
+                  <th className="px-3 py-2">Payload</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <EventRow key={entry.seq} entry={entry} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </TableScroll>
+      </div>
+
+      <Pagination page={page} totalPages={totalPages} loading={loading} onGo={goToPage} />
     </div>
   )
 }
@@ -251,16 +330,20 @@ function EventRow({ entry }: { entry: EventLogEntry }) {
 
 const TOOL_PAGE_SIZE = 100
 
+const TOOLS_SCOPE = 'dev.logs.tools'
+
 function ToolCallLogSection() {
   const [entries, setEntries] = useState<ToolCallRecord[]>([])
-  const [nameFilter, setNameFilter] = useState('')
-  const [paused, setPaused] = useState(false)
-  const [page, setPage] = useState(1)
+  const [inventory, setInventory] = useState<string[]>([])
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [toolNames, setToolNames] = useState<string[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const [nameFilter] = useFilterParam('tool', '', { scope: TOOLS_SCOPE })
+  const [page] = useFilterNumber('page', 1, { scope: TOOLS_SCOPE })
+  const [paused, setPaused] = useFilterFlag('paused', false, { scope: TOOLS_SCOPE })
+  const write = useFilterParamWriter({ scope: TOOLS_SCOPE })
 
   const fetchPage = useCallback(async (p: number, name?: string) => {
     setLoading(true)
@@ -271,7 +354,6 @@ function ToolCallLogSection() {
         name: name || undefined,
       })
       setEntries(result.entries)
-      setPage(result.page)
       setTotalPages(result.totalPages)
       setTotal(result.total)
     } catch (err) {
@@ -281,140 +363,108 @@ function ToolCallLogSection() {
     }
   }, [])
 
-  useEffect(() => { fetchPage(1) }, [fetchPage])
+  useEffect(() => { fetchPage(page, nameFilter || undefined) }, [fetchPage, page, nameFilter])
 
-  // Track tool names for filter dropdown
+  // Daftar alat lengkap datang dari inventarisnya sendiri, bukan dari catatan
+  // panggilan yang sedang tampil. Ini sumber yang benar: sebuah alat tetap
+  // bisa dipilih walaupun belum pernah dipanggil dalam 100 catatan terakhir.
   useEffect(() => {
-    if (entries.length > 0) {
-      setToolNames((prev) => {
-        const next = new Set(prev)
-        for (const e of entries) next.add(e.name)
-        return [...next].sort()
+    let cancelled = false
+    toolsApi
+      .load()
+      .then((r) => {
+        if (!cancelled) setInventory(r.inventory.map((t) => t.name))
       })
-    }
-  }, [entries])
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
-  // Live updates via polling — refetch page 1 every 3s while not paused.
-  // Older pages don't poll (user is browsing history; not jumping back).
+  // Nama dari catatan tetap ikut dikumpulkan sebagai jaring pengaman, buat
+  // alat lama yang sudah dicabut dari inventaris tapi riwayatnya masih ada.
+  const seenNames = useMemo(
+    () => [...inventory, ...entries.map((e) => e.name)],
+    [inventory, entries],
+  )
+  const toolUniverse = useOptionUniverse(seenNames)
+  const toolOptions = useMemo(() => toOptions(toolUniverse), [toolUniverse])
+
+  const handleNameChange = useCallback((name: string) => {
+    write({ tool: name || null, page: null })
+  }, [write])
+
+  const goToPage = useCallback((p: number) => {
+    write({ page: p === 1 ? null : String(p) })
+    scrollTableToTop(containerRef.current)
+  }, [write])
+
   useEffect(() => {
     if (paused || page !== 1) return
-    const interval = setInterval(() => {
-      fetchPage(1, nameFilter || undefined)
-    }, 3000)
+    const interval = setInterval(() => { fetchPage(1, nameFilter || undefined) }, 3000)
     return () => clearInterval(interval)
   }, [paused, page, nameFilter, fetchPage])
 
-  const handleNameChange = useCallback((name: string) => {
-    setNameFilter(name)
-    fetchPage(1, name)
-  }, [fetchPage])
-
-  const goToPage = useCallback((p: number) => {
-    fetchPage(p, nameFilter || undefined)
-    containerRef.current?.scrollTo(0, 0)
-  }, [fetchPage, nameFilter])
-
   return (
     <div className="flex flex-col gap-3 h-full">
-      {/* Controls */}
-      <div className="flex items-center gap-3 shrink-0">
-        <select
-          value={nameFilter}
-          onChange={(e) => handleNameChange(e.target.value)}
-          className="bg-bg-tertiary text-text text-sm rounded-md border border-border px-2 py-1.5 outline-none focus:border-accent"
-        >
-          <option value="">All tools</option>
-          {toolNames.map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
+      <Toolbar ariaLabel="Tool call filters" className="shrink-0">
+        <ToolbarGroup>
+          <FilterSelect
+            options={toolOptions}
+            value={nameFilter}
+            onChange={handleNameChange}
+            ariaLabel="Tool name"
+            allLabel="All tools"
+            emptyLabel="No tools yet"
+          />
+        </ToolbarGroup>
 
-        <button
-          onClick={() => setPaused(!paused)}
-          className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${
-            paused
-              ? 'border-notification-border text-notification-border hover:bg-notification-bg'
-              : 'border-border text-text-muted hover:bg-bg-tertiary'
-          }`}
-        >
-          {paused ? 'Resume' : 'Pause'}
-        </button>
+        <ToolbarGroup>
+          <AutoRefreshToggle paused={paused} onChange={setPaused} />
+        </ToolbarGroup>
 
-        <span className="text-xs text-text-muted ml-auto">
-          {total > 0
-            ? `Page ${page} of ${totalPages} \u00b7 ${total} calls`
-            : '0 calls'
-          }
-          {nameFilter && ' (filtered)'}
-        </span>
-      </div>
-
-      {/* Table */}
-      <div
-        ref={containerRef}
-        className="flex-1 min-h-0 bg-bg rounded-lg border border-border overflow-y-auto font-mono text-xs"
-      >
-        {loading && entries.length === 0 ? (
-          <div className="px-4 py-8 text-center text-text-muted">Loading...</div>
-        ) : entries.length === 0 ? (
-          <div className="px-4 py-8 text-center text-text-muted">No tool calls yet</div>
-        ) : (
-          <table className="w-full">
-            <thead className="sticky top-0 bg-bg-secondary">
-              <tr className="text-text-muted text-left">
-                <th className="px-3 py-2 w-12">#</th>
-                <th className="px-3 py-2 w-36">Time</th>
-                <th className="px-3 py-2 w-48">Tool</th>
-                <th className="px-3 py-2 w-20 text-right">Duration</th>
-                <th className="px-3 py-2 w-16 text-center">Status</th>
-                <th className="px-3 py-2">Input</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((record) => (
-                <ToolCallRow key={record.seq} record={record} />
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 shrink-0">
-          <button
-            onClick={() => goToPage(1)}
-            disabled={page <= 1 || loading}
-            className="text-xs px-2 py-1 rounded border border-border text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            &laquo;&laquo;
-          </button>
-          <button
-            onClick={() => goToPage(page - 1)}
-            disabled={page <= 1 || loading}
-            className="text-xs px-2 py-1 rounded border border-border text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            &laquo;
-          </button>
-          <span className="text-xs text-text-muted px-2">
-            {page} / {totalPages}
+        <ToolbarGroup end>
+          <span className="text-xs text-text-muted">
+            {total > 0 ? `Page ${page} of ${totalPages} · ${total} calls` : '0 calls'}
+            {nameFilter && ' (filtered)'}
           </span>
-          <button
-            onClick={() => goToPage(page + 1)}
-            disabled={page >= totalPages || loading}
-            className="text-xs px-2 py-1 rounded border border-border text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            &raquo;
-          </button>
-          <button
-            onClick={() => goToPage(totalPages)}
-            disabled={page >= totalPages || loading}
-            className="text-xs px-2 py-1 rounded border border-border text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            &raquo;&raquo;
-          </button>
-        </div>
-      )}
+        </ToolbarGroup>
+      </Toolbar>
+
+      {/* Enam kolom, empat di antaranya lebarnya dipatok. Totalnya sudah lewat
+          lebar telepon sebelum kolom Input sempat muncul. */}
+      <div ref={containerRef} className="flex flex-1 min-h-0">
+        <TableScroll
+          label="Tool call log"
+          maxHeight="100%"
+          className="flex-1 bg-bg font-mono text-xs"
+          innerClassName="h-full"
+        >
+          {loading && entries.length === 0 ? (
+            <div className="px-4 py-8 text-center text-text-muted">Loading...</div>
+          ) : entries.length === 0 ? (
+            <div className="px-4 py-8 text-center text-text-muted">No tool calls yet</div>
+          ) : (
+            <table className="w-full min-w-[760px]">
+              <thead className="sticky top-0 bg-bg-secondary">
+                <tr className="text-text-muted text-left">
+                  <th className="px-3 py-2 w-12">#</th>
+                  <th className="px-3 py-2 w-36">Time</th>
+                  <th className="px-3 py-2 w-48">Tool</th>
+                  <th className="px-3 py-2 w-20 text-right">Duration</th>
+                  <th className="px-3 py-2 w-16 text-center">Status</th>
+                  <th className="px-3 py-2">Input</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((record) => (
+                  <ToolCallRow key={record.seq} record={record} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </TableScroll>
+      </div>
+
+      <Pagination page={page} totalPages={totalPages} loading={loading} onGo={goToPage} />
     </div>
   )
 }
@@ -437,7 +487,7 @@ function ToolCallRow({ record }: { record: ToolCallRecord }) {
         <td className={`px-3 py-1.5 text-center ${statusColor(record.status)}`}>{record.status}</td>
         <td className="px-3 py-1.5 text-text-muted truncate max-w-0">
           {inputPreview}
-          <span className="ml-1 text-accent">{expanded ? '\u25be' : '\u25b8'}</span>
+          <span className="ml-1 text-accent">{expanded ? '▾' : '▸'}</span>
         </td>
       </tr>
       {expanded && (
@@ -471,35 +521,42 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'tools', label: 'Tool Calls' },
 ]
 
+const TAB_KEYS: readonly Tab[] = TABS.map((t) => t.key)
+
 export function LogsPage() {
-  const [tab, setTab] = useState<Tab>('events')
+  const [tab, setTab] = useFilterEnum<Tab>('view', TAB_KEYS, 'events', { scope: 'dev.logs' })
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="px-4 md:px-6 border-b border-border/60">
-        <div className="flex gap-1">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-3 py-2 text-sm font-medium transition-colors relative ${
-                tab === t.key ? 'text-accent' : 'text-text-muted hover:text-text'
-              }`}
-            >
-              {t.label}
-              {tab === t.key && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent rounded-t" />
-              )}
-            </button>
-          ))}
-        </div>
+      <div className="border-b border-border/60">
+        <Container size="wide">
+          <div className="flex flex-wrap gap-1" role="tablist" aria-label="Log views">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.key}
+                onClick={() => setTab(t.key)}
+                className={`px-3 py-2 text-sm font-medium transition-colors relative cursor-pointer ${
+                  tab === t.key ? 'text-accent' : 'text-text-muted hover:text-text'
+                }`}
+              >
+                {t.label}
+                {tab === t.key && (
+                  <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent rounded-t" />
+                )}
+              </button>
+            ))}
+          </div>
+        </Container>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 px-4 md:px-6 py-5">
+      <Container size="wide" className="flex flex-1 flex-col min-h-0 py-5">
         <div className="flex-1 min-h-0">
           {tab === 'events' ? <EventLogSection /> : <ToolCallLogSection />}
         </div>
-      </div>
+      </Container>
     </div>
   )
 }
