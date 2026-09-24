@@ -577,8 +577,14 @@ export function createTradingRoutes(ctx: UTAEngineContext) {
     if (!ctx.snapshotService) return c.json({ snapshots: [] })
     const id = c.req.param('id')
     const limit = Number(c.req.query('limit')) || 100
+    // Klien sudah lama mengirim startTime dan endTime, dan store-nya pun sudah
+    // mendukung, tapi route ini cuma membaca limit. Jadi permintaan snapshot
+    // pada satu titik waktu selalu dijawab dengan snapshot terbaru, dan halaman
+    // Portfolio menampilkan keadaan yang berbeda dari titik yang diklik.
+    const startTime = c.req.query('startTime') || undefined
+    const endTime = c.req.query('endTime') || undefined
     try {
-      const snapshots = await ctx.snapshotService.getRecent(id, limit)
+      const snapshots = await ctx.snapshotService.getRecent(id, limit, { startTime, endTime })
       return c.json({ snapshots })
     } catch {
       return c.json({ snapshots: [] })

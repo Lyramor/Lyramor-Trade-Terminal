@@ -20,7 +20,18 @@ const RETRY_DELAY_MS = 3_000
 export interface SnapshotService {
   takeSnapshot(accountId: string, trigger: SnapshotTrigger): Promise<UTASnapshot | null>
   takeAllSnapshots(trigger: SnapshotTrigger): Promise<void>
-  getRecent(accountId: string, limit?: number): Promise<UTASnapshot[]>
+  /**
+   * `range` menyempitkan hasil ke satu jendela waktu. Lapisan store sudah lama
+   * mendukungnya lewat readRange, tapi tidak pernah diteruskan dari sini, jadi
+   * pemanggil yang mengirim startTime dan endTime tetap menerima snapshot
+   * terbaru. Akibat nyatanya: di halaman Portfolio, mengklik satu titik pada
+   * grafik selalu memuat keadaan terakhir, bukan keadaan pada titik itu.
+   */
+  getRecent(
+    accountId: string,
+    limit?: number,
+    range?: { startTime?: string; endTime?: string },
+  ): Promise<UTASnapshot[]>
   deleteSnapshot(accountId: string, timestamp: string): Promise<boolean>
 }
 
@@ -101,8 +112,8 @@ export function createSnapshotService(deps: {
       )
     },
 
-    async getRecent(accountId, limit = 10) {
-      return getStore(accountId).readRange({ limit })
+    async getRecent(accountId, limit = 10, range) {
+      return getStore(accountId).readRange({ limit, ...range })
     },
 
     async deleteSnapshot(accountId, timestamp) {
