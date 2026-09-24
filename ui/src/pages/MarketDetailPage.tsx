@@ -1,4 +1,5 @@
 import { PageHeader } from '../components/PageHeader'
+import { Container } from '../components/layout/Container'
 import { SearchBox } from '../components/market/SearchBox'
 import { EquityDetail } from './market/EquityDetail'
 import { GenericDetail } from './market/GenericDetail'
@@ -19,13 +20,15 @@ export function MarketDetailPage({ spec }: MarketDetailPageProps) {
         description={`${assetClass} · price history`}
         right={<PinButton assetClass={assetClass} symbol={symbol} />}
       />
-      <div className="flex-1 flex flex-col gap-3 px-4 md:px-8 py-4 min-h-0 overflow-y-auto">
-        <SearchBox />
-        {assetClass === 'equity' ? (
-          <EquityDetail symbol={symbol} />
-        ) : (
-          <GenericDetail symbol={symbol} assetClass={assetClass} />
-        )}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <Container size="wide" className="flex min-h-full flex-col gap-3 py-4">
+          <SearchBox />
+          {assetClass === 'equity' ? (
+            <EquityDetail symbol={symbol} />
+          ) : (
+            <GenericDetail symbol={symbol} assetClass={assetClass} />
+          )}
+        </Container>
       </div>
     </div>
   )

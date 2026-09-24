@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   createChart,
@@ -11,6 +11,8 @@ import {
   type HistogramData,
 } from 'lightweight-charts'
 import { barsApi, type AssetClass, type HistoricalBar, type BarSourceCandidate, type BarMeta } from '../../api/market'
+import { SegmentedControl } from '../filters/SegmentedControl'
+import { Toolbar, ToolbarGroup } from '../layout/Toolbar'
 
 type Interval = '1m' | '5m' | '1h' | '1d'
 type Timeframe = '1D' | '5D' | '1M' | '3M' | '1Y' | '5Y' | 'All'
@@ -29,6 +31,62 @@ function parseTimeframe(s: string | null): Timeframe {
 }
 
 const INTRADAY: ReadonlySet<Interval> = new Set(['1m', '5m', '1h'])
+
+/**
+ * Penjagaan silang antara Interval dan Range.
+ *
+ * Dua kendali ini dulu berdiri sendiri tanpa saling tahu, dan sebagian
+ * pasangannya tidak mungkin dilayani: `1m` dengan `1Y` berarti meminta 365
+ * hari data per menit, yang berakhir jadi muatan raksasa atau pesan "No bars
+ * in this range" tanpa sebab yang kelihatan. Sebaliknya `1d` dengan `1D` cuma
+ * menghasilkan satu batang, jadi grafiknya kosong secara visual.
+ *
+ * Daftar di bawah menyebut rentang yang masih wajar untuk tiap lebar batang,
+ * kira-kira sampai sepuluh ribu batang sekali muat. Ini soal apa yang muat di
+ * layar dan di jaringan, bukan soal perhitungan harga, jadi tidak ada angka
+ * pasar yang tersentuh.
+ */
+const RANGES_FOR_INTERVAL: Record<Interval, readonly Timeframe[]> = {
+  '1m': ['1D', '5D'],
+  '5m': ['1D', '5D', '1M'],
+  '1h': ['1D', '5D', '1M', '3M', '1Y'],
+  '1d': ['5D', '1M', '3M', '1Y', '5Y', 'All'],
+}
+
+function rangeAllowed(interval: Interval, tf: Timeframe): boolean {
+  return RANGES_FOR_INTERVAL[interval].includes(tf)
+}
+
+/** Rentang sah yang paling dekat dengan yang sedang dipilih. */
+function nearestRange(interval: Interval, tf: Timeframe): Timeframe {
+  const allowed = RANGES_FOR_INTERVAL[interval]
+  if (allowed.includes(tf)) return tf
+  const wanted = TIMEFRAMES.indexOf(tf)
+  let best = allowed[0]
+  let bestDistance = Infinity
+  for (const candidate of allowed) {
+    const distance = Math.abs(TIMEFRAMES.indexOf(candidate) - wanted)
+    if (distance < bestDistance) {
+      best = candidate
+      bestDistance = distance
+    }
+  }
+  return best
+}
+
+/** Kalimat yang memberi tahu apa yang barusan digeser, dan kenapa. */
+function adjustmentNote(interval: Interval, from: Timeframe, to: Timeframe): string {
+  const allowed = RANGES_FOR_INTERVAL[interval]
+  const tooWide = TIMEFRAMES.indexOf(from) > TIMEFRAMES.indexOf(to)
+  return tooWide
+    ? `Range moved from ${from} to ${to}. ${interval} bars load at most ${allowed[allowed.length - 1]} of history.`
+    : `Range moved from ${from} to ${to}. ${interval} bars need at least ${allowed[0]} to draw more than a candle or two.`
+}
+
+function intervalHint(interval: Interval): string {
+  const allowed = RANGES_FOR_INTERVAL[interval]
+  return `Candle width. Works with ${allowed[0]} to ${allowed[allowed.length - 1]}.`
+}
 
 function daysForTimeframe(tf: Timeframe): number | null {
   switch (tf) {
@@ -59,6 +117,7 @@ interface Props {
 }
 
 export function KlinePanel({ selection }: Props) {
+  const sourceSelectId = useId()
   const [searchParams, setSearchParams] = useSearchParams()
   const interval = parseInterval(searchParams.get('interval'))
   const tf = parseTimeframe(searchParams.get('range'))
@@ -83,6 +142,32 @@ export function KlinePanel({ selection }: Props) {
       return next
     }, { replace: true })
   }
+
+  // Pesan yang muncul saat rentangnya digeser sendiri karena intervalnya
+  // berubah. Tanpa ini, tombol Range terlihat pindah tanpa sebab.
+  //
+  // Pasangan yang sedang dijelaskan ikut disimpan. Efek di bawah jalan lagi
+  // tepat setelah rentangnya digeser, dan kalau pesannya dibuang begitu
+  // pasangannya sudah sah, dia cuma berkedip sepersekian detik lalu hilang.
+  const [autoNote, setAutoNote] = useState<{ interval: Interval; tf: Timeframe; text: string } | null>(null)
+
+  // Rapikan pasangan interval dan range yang tidak bisa dilayani. Dijalankan
+  // dari efek, bukan cuma dari penanganan klik, karena pasangannya juga bisa
+  // datang dari URL: SearchBox membawa interval dan range lama ke simbol baru,
+  // dan alamat bisa diketik tangan.
+  useEffect(() => {
+    const fixed = nearestRange(interval, tf)
+    if (fixed === tf) {
+      // Simpan pesan yang memang menjelaskan pasangan ini, buang yang lain.
+      setAutoNote((prev) => (prev && prev.interval === interval && prev.tf === tf ? prev : null))
+      return
+    }
+    setAutoNote({ interval, tf: fixed, text: adjustmentNote(interval, tf, fixed) })
+    setTf(fixed)
+    // setTf dibuat ulang tiap render (bukan useCallback), jadi tidak ikut
+    // jadi dependency supaya efeknya tidak berputar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interval, tf])
 
   const [bars, setBars] = useState<HistoricalBar[] | null>(null)
   const [meta, setMeta] = useState<BarMeta | null>(null)
@@ -172,6 +257,10 @@ export function KlinePanel({ selection }: Props) {
       setError('Commodity K-line support is coming in the next step.')
       return
     }
+    // Pasangan yang mustahil tidak usah dikirim ke jaringan sama sekali.
+    // Efek penjaga di atas sudah menggeser rentangnya, dan efek ini jalan
+    // lagi begitu URL-nya berubah.
+    if (!rangeAllowed(interval, tf)) return
     let cancelled = false
     const run = (isInitial: boolean) => {
       if (isInitial) setLoading(true)
@@ -268,11 +357,11 @@ export function KlinePanel({ selection }: Props) {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-5 flex-wrap">
+        <Toolbar ariaLabel="Chart controls">
           {sourceOptions.length > 1 && (
-            <label className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wide text-text-muted/70">Source</span>
+            <ToolbarGroup label="Source" htmlFor={sourceSelectId}>
               <select
+                id={sourceSelectId}
                 value={selectedBarId ?? meta?.barId ?? ''}
                 onChange={(e) => setSelectedBarId(e.target.value || null)}
                 className="bg-bg-tertiary border border-border rounded px-2 py-1 text-[12px] text-text cursor-pointer max-w-[240px]"
@@ -284,42 +373,39 @@ export function KlinePanel({ selection }: Props) {
                   </option>
                 ))}
               </select>
-            </label>
+            </ToolbarGroup>
           )}
-          <label className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-text-muted/70">Interval</span>
-            <div className="flex border border-border rounded overflow-hidden" title="Candle width (how much time each bar covers)">
-              {INTERVALS.map((iv, i) => (
-                <button
-                  key={iv}
-                  onClick={() => selectInterval(iv)}
-                  className={`px-2 py-1 text-[12px] transition-colors cursor-pointer ${
-                    i > 0 ? 'border-l border-border' : ''
-                  } ${interval === iv ? 'bg-bg-tertiary text-text' : 'text-text-muted hover:text-text'}`}
-                >
-                  {iv}
-                </button>
-              ))}
-            </div>
-          </label>
-          <label className="flex items-center gap-2">
-            <span className="text-[11px] uppercase tracking-wide text-text-muted/70">Range</span>
-            <div className="flex border border-border rounded overflow-hidden" title="How far back to load history">
-              {TIMEFRAMES.map((t, i) => (
-                <button
-                  key={t}
-                  onClick={() => setTf(t)}
-                  className={`px-2 py-1 text-[12px] transition-colors cursor-pointer ${
-                    i > 0 ? 'border-l border-border' : ''
-                  } ${tf === t ? 'bg-bg-tertiary text-text' : 'text-text-muted hover:text-text'}`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </label>
-        </div>
+          {/* Interval selalu bisa dipilih: itu maksud utama pengguna. Range
+              yang menyesuaikan, dan pilihan yang tidak bisa dilayani interval
+              sekarang ditampilkan redup, bukan dihilangkan, supaya kelihatan
+              bahwa pilihan itu memang ada. */}
+          <SegmentedControl
+            label="Interval"
+            options={INTERVALS.map((iv) => ({ value: iv, label: iv, title: intervalHint(iv) }))}
+            value={interval}
+            onChange={selectInterval}
+          />
+          <SegmentedControl
+            label="Range"
+            options={TIMEFRAMES.map((t) => ({
+              value: t,
+              label: t,
+              disabled: !rangeAllowed(interval, t),
+              title: rangeAllowed(interval, t)
+                ? 'How far back to load history'
+                : `Not available at ${interval} bars`,
+            }))}
+            value={tf}
+            onChange={(t) => { setAutoNote(null); setTf(t) }}
+          />
+        </Toolbar>
       </div>
+
+      {autoNote && (
+        <p role="status" className="px-1 pb-2 text-[11px] text-text-muted">
+          {autoNote.text}
+        </p>
+      )}
 
       <div className="relative flex-1 min-h-0 border border-border rounded bg-bg-secondary/30">
         <div ref={containerRef} className="absolute inset-0" />

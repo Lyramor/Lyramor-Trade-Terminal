@@ -6,6 +6,8 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { BoardMeta } from '../components/market/BoardMeta'
+import { Container } from '../components/layout/Container'
+import { TableScroll } from '../components/layout/TableScroll'
 import { PageHeader } from '../components/PageHeader'
 import { CenteredLoading } from '../components/StateViews'
 import { marketApi, type SectorRotationResult, type SectorRotationRow } from '../api/market'
@@ -88,22 +90,24 @@ export function MarketRotationPage() {
         }
         live={{ lastUpdated: updatedAt }}
       />
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 flex flex-col gap-6 min-h-0">
-        {loading && !data && <CenteredLoading label={t('common.loading')} />}
-        {error && (
-          <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
-        )}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <Container size="wide" className="flex flex-col gap-6 py-4">
+          {loading && !data && <CenteredLoading label={t('common.loading')} />}
+          {error && (
+            <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
+          )}
 
-        {data && (
-          <>
-            <QuadrantChart points={points} t={t} />
-            <RotationTable rows={data.sectors} benchmarkSymbol={data.benchmark.symbol} t={t} />
-            <p className="text-[11px] leading-relaxed text-text-muted/70 max-w-3xl">
-              <span className="font-semibold text-text-muted">{t('market.rotationMethodology')}: </span>
-              {data.methodology}
-            </p>
-          </>
-        )}
+          {data && (
+            <>
+              <QuadrantChart points={points} t={t} />
+              <RotationTable rows={data.sectors} benchmarkSymbol={data.benchmark.symbol} t={t} />
+              <p className="text-[11px] leading-relaxed text-text-muted/70 max-w-3xl">
+                <span className="font-semibold text-text-muted">{t('market.rotationMethodology')}: </span>
+                {data.methodology}
+              </p>
+            </>
+          )}
+        </Container>
       </div>
     </div>
   )
@@ -173,7 +177,7 @@ function PointTooltip({ active, payload, t }: { active?: boolean; payload?: Arra
 
 function RotationTable({ rows, benchmarkSymbol, t }: { rows: SectorRotationRow[]; benchmarkSymbol: string; t: TFunction }) {
   return (
-    <div className="overflow-x-auto">
+    <TableScroll bordered={false} label={t('market.sectorRotation')}>
       <table className="w-full text-[12px] border-collapse">
         <thead>
           <tr className="text-text-muted/70 text-left border-b border-border">
@@ -205,6 +209,6 @@ function RotationTable({ rows, benchmarkSymbol, t }: { rows: SectorRotationRow[]
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
   )
 }

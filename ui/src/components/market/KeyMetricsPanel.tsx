@@ -95,7 +95,9 @@ export function KeyMetricsPanel({ symbol }: Props) {
       {loading && <div className="text-[12px] text-text-muted">Loading…</div>}
       {error && !loading && <div className="text-[12px] text-red">{error}</div>}
       {!loading && !error && data && (
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
+        // Dua kolom baru muat begitu panelnya selebar layar kecil ke atas.
+        // Di 360px, dua kolom bikin label dan angkanya saling tabrak.
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
           {rows.map(([k, v]) => (
             <div key={k} className="flex items-baseline justify-between border-b border-border/30 py-1 last:border-b-0">
               <dt className="text-text-muted/70">{k}</dt>

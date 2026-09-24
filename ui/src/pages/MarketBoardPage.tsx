@@ -1,10 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, Tooltip } from 'recharts'
 import { useReferenceBoard } from '../components/market/useReferenceBoard'
 import { BoardMeta } from '../components/market/BoardMeta'
 import { PageHeader } from '../components/PageHeader'
 import { CenteredLoading } from '../components/StateViews'
+import { Container } from '../components/layout/Container'
+import { TableScroll } from '../components/layout/TableScroll'
+import { SegmentedControl } from '../components/filters/SegmentedControl'
+import { DateRangeFilter, resolvePreset, toDateInput, type DateRangePreset } from '../components/filters/DateRangeFilter'
+import { useFilterRange, type FilterRange } from '../hooks/useFilterParam'
 import { SeriesCard, fmtSeriesValue, fmtCompactNum } from '../components/market/SeriesCard'
 import {
   referenceApi,
@@ -57,7 +62,11 @@ export function MarketBoardPage({ spec }: PageProps) {
 
 // ==================== Movers ====================
 
-type MoversList = 'gainers' | 'losers' | 'active' | 'undervaluedGrowth' | 'growthTech' | 'smallCaps' | 'undervaluedLarge'
+const MOVERS_LISTS = [
+  'gainers', 'losers', 'active', 'undervaluedGrowth', 'growthTech', 'smallCaps', 'undervaluedLarge',
+] as const
+
+type MoversList = (typeof MOVERS_LISTS)[number]
 
 function MoversBoardView() {
   const { t } = useTranslation()
@@ -78,32 +87,24 @@ function MoversBoardView() {
         }
         live={{ lastUpdated: updatedAt }}
       />
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 flex flex-col gap-4 min-h-0">
-        <div className="flex items-center gap-1">
-          {(['gainers', 'losers', 'active', 'undervaluedGrowth', 'growthTech', 'smallCaps', 'undervaluedLarge'] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setList(k)}
-              className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
-                list === k
-                  ? 'bg-bg-tertiary text-text'
-                  : 'text-text-muted hover:text-text hover:bg-bg-secondary'
-              }`}
-            >
-              {listLabel(k, t)}
-            </button>
-          ))}
-        </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <Container size="wide" className="flex flex-col gap-4 py-4">
+          <SegmentedControl
+            options={MOVERS_LISTS.map((k) => ({ value: k, label: listLabel(k, t) }))}
+            value={list}
+            onChange={setList}
+            ariaLabel={t('market.boardMovers')}
+          />
 
-        {loading && !data && <CenteredLoading label={t('common.loading')} />}
-        {error && (
-          <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
-        )}
-        {data && rows.length === 0 && !loading && (
-          <div className="text-[13px] text-text-muted">{t('market.noMatches')}</div>
-        )}
-        {rows.length > 0 && <MoversTable rows={rows} />}
+          {loading && !data && <CenteredLoading label={t('common.loading')} />}
+          {error && (
+            <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
+          )}
+          {data && rows.length === 0 && !loading && (
+            <div className="text-[13px] text-text-muted">{t('market.noMatches')}</div>
+          )}
+          {rows.length > 0 && <MoversTable rows={rows} />}
+        </Container>
       </div>
     </div>
   )
@@ -125,7 +126,7 @@ function MoversTable({ rows }: { rows: MoverRow[] }) {
   const { t } = useTranslation()
   const openOrFocus = useWorkspace((s) => s.openOrFocus)
   return (
-    <div className="overflow-x-auto">
+    <TableScroll bordered={false} label={t('market.boardMovers')}>
       <table className="w-full text-[12px] border-collapse">
         <thead>
           <tr className="text-text-muted/70 text-left border-b border-border">
@@ -157,7 +158,7 @@ function MoversTable({ rows }: { rows: MoverRow[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
   )
 }
 
@@ -182,38 +183,33 @@ function CalendarBoardView() {
         }
         live={{ lastUpdated: updatedAt }}
       />
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 flex flex-col gap-4 min-h-0">
-        <div className="flex items-center gap-1">
-          {(['earnings', 'ipos', 'dividends'] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setList(k)}
-              className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
-                list === k
-                  ? 'bg-bg-tertiary text-text'
-                  : 'text-text-muted hover:text-text hover:bg-bg-secondary'
-              }`}
-            >
-              {calendarLabel(k, t)} ({data?.[k].length ?? 0})
-            </button>
-          ))}
-        </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <Container size="wide" className="flex flex-col gap-4 py-4">
+          <SegmentedControl
+            options={(['earnings', 'ipos', 'dividends'] as const).map((k) => ({
+              value: k,
+              label: `${calendarLabel(k, t)} (${data?.[k].length ?? 0})`,
+            }))}
+            value={list}
+            onChange={setList}
+            ariaLabel={t('market.boardCalendar')}
+          />
 
-        {loading && !data && <CenteredLoading label={t('common.loading')} />}
-        {error && (
-          <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
-        )}
-        {/* Per-list upstream failure — loud, with the provider's own message. */}
-        {data?.errors?.[list] && (
-          <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{data.errors[list]}</div>
-        )}
-        {data && data[list].length === 0 && !loading && !data.errors?.[list] && (
-          <div className="text-[13px] text-text-muted">{t('market.noMatches')}</div>
-        )}
-        {data && list === 'earnings' && data.earnings.length > 0 && <EarningsTable board={data} />}
-        {data && list === 'ipos' && data.ipos.length > 0 && <IpoTable board={data} />}
-        {data && list === 'dividends' && data.dividends.length > 0 && <DividendTable board={data} />}
+          {loading && !data && <CenteredLoading label={t('common.loading')} />}
+          {error && (
+            <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
+          )}
+          {/* Per-list upstream failure — loud, with the provider's own message. */}
+          {data?.errors?.[list] && (
+            <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{data.errors[list]}</div>
+          )}
+          {data && data[list].length === 0 && !loading && !data.errors?.[list] && (
+            <div className="text-[13px] text-text-muted">{t('market.noMatches')}</div>
+          )}
+          {data && list === 'earnings' && data.earnings.length > 0 && <EarningsTable board={data} />}
+          {data && list === 'ipos' && data.ipos.length > 0 && <IpoTable board={data} />}
+          {data && list === 'dividends' && data.dividends.length > 0 && <DividendTable board={data} />}
+        </Container>
       </div>
     </div>
   )
@@ -241,7 +237,7 @@ function EarningsTable({ board }: { board: CalendarBoard }) {
   // Sorted by date so the board reads as an agenda.
   const rows = [...board.earnings].sort((a, b) => a.report_date.localeCompare(b.report_date))
   return (
-    <CalTable head={[t('market.colDate'), t('market.colSymbol'), t('market.colEpsPrev'), t('market.colEpsEst')]} rightCols={[2, 3]}>
+    <CalTable label={t('market.calEarnings')} head={[t('market.colDate'), t('market.colSymbol'), t('market.colEpsPrev'), t('market.colEpsEst')]} rightCols={[2, 3]}>
       {rows.map((r, i) => (
         <tr key={`${r.symbol}-${i}`} className="border-b border-border/50 hover:bg-bg-secondary/40 cursor-pointer" onClick={() => open(r.symbol)}>
           <td className="py-1.5 pr-3 text-text-muted whitespace-nowrap">{r.report_date}</td>
@@ -262,7 +258,7 @@ function IpoTable({ board }: { board: CalendarBoard }) {
   const open = useOpenEquity()
   const rows = [...board.ipos].sort((a, b) => (a.ipo_date ?? '').localeCompare(b.ipo_date ?? ''))
   return (
-    <CalTable head={[t('market.colDate'), t('market.colSymbol'), t('market.colExchange')]}>
+    <CalTable label={t('market.calIpos')} head={[t('market.colDate'), t('market.colSymbol'), t('market.colExchange')]}>
       {rows.map((r, i) => (
         <tr key={`${r.symbol}-${i}`} className="border-b border-border/50 hover:bg-bg-secondary/40 cursor-pointer" onClick={() => open(r.symbol)}>
           <td className="py-1.5 pr-3 text-text-muted whitespace-nowrap">{r.ipo_date ?? '—'}</td>
@@ -282,7 +278,7 @@ function DividendTable({ board }: { board: CalendarBoard }) {
   const open = useOpenEquity()
   const rows = [...board.dividends].sort((a, b) => a.ex_dividend_date.localeCompare(b.ex_dividend_date))
   return (
-    <CalTable head={[t('market.colExDate'), t('market.colSymbol'), t('market.colDivAmount'), t('market.colPayDate')]} rightCols={[2]}>
+    <CalTable label={t('market.calDividends')} head={[t('market.colExDate'), t('market.colSymbol'), t('market.colDivAmount'), t('market.colPayDate')]} rightCols={[2]}>
       {rows.map((r, i) => (
         <tr key={`${r.symbol}-${i}`} className="border-b border-border/50 hover:bg-bg-secondary/40 cursor-pointer" onClick={() => open(r.symbol)}>
           <td className="py-1.5 pr-3 text-text-muted whitespace-nowrap">{r.ex_dividend_date}</td>
@@ -298,9 +294,9 @@ function DividendTable({ board }: { board: CalendarBoard }) {
   )
 }
 
-function CalTable({ head, rightCols = [], children }: { head: string[]; rightCols?: number[]; children: React.ReactNode }) {
+function CalTable({ head, rightCols = [], label, children }: { head: string[]; rightCols?: number[]; label: string; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto">
+    <TableScroll bordered={false} label={label}>
       <table className="w-full text-[12px] border-collapse">
         <thead>
           <tr className="text-text-muted/70 text-left border-b border-border">
@@ -311,32 +307,58 @@ function CalTable({ head, rightCols = [], children }: { head: string[]; rightCol
         </thead>
         <tbody>{children}</tbody>
       </table>
-    </div>
+    </TableScroll>
   )
 }
 
 // ==================== Macro ====================
 
+/**
+ * Jendela tanggal papan Macro. Preset di sini MENGISI kedua isian tanggal,
+ * jadi tidak ada lagi dua filter yang saling meniadakan seperti versi lama:
+ * dulu mengisi satu kotak tanggal mematikan preset sepenuhnya, sementara
+ * nilai presetnya masih tersimpan diam-diam dan hidup lagi begitu tombol
+ * bersihkan ditekan.
+ *
+ * Angka presetnya tetap sama dengan sebelumnya (30 / 90 / 180 hari), cuma
+ * labelnya sekarang jujur: dulu tertulis "30H" di antarmuka berbahasa
+ * Inggris, dan itu terbaca sebagai 30 jam padahal kodenya memang hari.
+ */
+const MACRO_PRESETS: readonly DateRangePreset[] = [
+  { id: '30d', label: '30D', days: 30 },
+  { id: '90d', label: '90D', days: 90 },
+  { id: '180d', label: '180D', days: 180 },
+  { id: '1y', label: '1Y', days: 365 },
+]
+
+/** Jendela bawaan, sama dengan yang dipakai papan ini sejak awal. */
+const MACRO_DEFAULT_PRESET = MACRO_PRESETS[1]
+
 function MacroBoardView() {
   const { t } = useTranslation()
   const { data, updatedAt, loading, error } = useReferenceBoard<MacroBoard>(referenceApi.macro, 30 * 60 * 1000)
-  // Client-side date window over the fetched history (~1y). Presets slice the
-  // last N calendar days; the from/to inputs override for a precise range.
-  const [preset, setPreset] = useState<30 | 90 | 180 | 0>(90)
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  // Jendela tanggal sisi klien di atas riwayat yang sudah diambil (~1 tahun).
+  // Disimpan di URL supaya selamat saat pindah tab, lihat useFilterParam.
+  const [range, setRange] = useFilterRange({ scope: 'market-macro' })
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const today = useMemo(() => toDateInput(new Date()), [])
+
+  // Isi jendela bawaan sekali saat papan dibuka tanpa rentang di URL. Ditulis
+  // ke isian tanggalnya, bukan disimpan diam-diam, supaya yang dilihat
+  // pengguna persis sama dengan yang dipakai menyaring. Setelah itu tombol
+  // bersihkan benar-benar berarti "seluruh riwayat" dan tidak ada yang
+  // menghidupkan preset lama di belakang punggungnya.
+  const [seeded, setSeeded] = useState(false)
+  useEffect(() => {
+    if (seeded) return
+    setSeeded(true)
+    if (!range.from && !range.to) setRange(resolvePreset(MACRO_DEFAULT_PRESET))
+  }, [seeded, range.from, range.to, setRange])
 
   const cards = (data?.cards ?? []).map((c) => {
     let pts = c.points
-    if (from) pts = pts.filter((p) => p.date >= from)
-    if (to) pts = pts.filter((p) => p.date <= to)
-    if (!from && !to && preset) {
-      const cutoff = new Date()
-      cutoff.setDate(cutoff.getDate() - preset)
-      const iso = cutoff.toISOString().slice(0, 10)
-      pts = pts.filter((p) => p.date >= iso)
-    }
+    if (range.from) pts = pts.filter((p) => p.date >= range.from)
+    if (range.to) pts = pts.filter((p) => p.date <= range.to)
     const latest = pts[pts.length - 1] ?? null
     const prev = pts[pts.length - 2] ?? null
     return {
@@ -348,7 +370,6 @@ function MacroBoardView() {
     }
   })
 
-  const presetActive = (p: 30 | 90 | 180 | 0) => !from && !to && preset === p
   const selected = data?.cards.find((c) => c.id === selectedId) ?? null
 
   return (
@@ -363,81 +384,68 @@ function MacroBoardView() {
         }
         live={{ lastUpdated: updatedAt }}
       />
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 flex flex-col gap-4 min-h-0">
-        {/* Date filter: presets + precise from/to range. */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1">
-            {([30, 90, 180, 0] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => { setPreset(p); setFrom(''); setTo('') }}
-                className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
-                  presetActive(p) ? 'bg-bg-tertiary text-text' : 'text-text-muted hover:text-text hover:bg-bg-secondary'
-                }`}
-              >
-                {p === 0 ? 'Semua' : `${p}H`}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1.5 text-[12px] text-text-muted">
-            <input
-              type="date"
-              value={from}
-              max={to || undefined}
-              onChange={(e) => setFrom(e.target.value)}
-              className="bg-bg border border-border rounded-md px-2 py-1 text-text font-mono text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            />
-            <span>→</span>
-            <input
-              type="date"
-              value={to}
-              min={from || undefined}
-              onChange={(e) => setTo(e.target.value)}
-              className="bg-bg border border-border rounded-md px-2 py-1 text-text font-mono text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            />
-            {(from || to) && (
-              <button
-                type="button"
-                onClick={() => { setFrom(''); setTo('') }}
-                className="px-2 py-1 rounded-md hover:bg-bg-secondary hover:text-text"
-                aria-label="clear date range"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <Container size="wide" className="flex flex-col gap-4 py-4">
+          {/* Preset dan isian tanggal hidup berdampingan: preset mengisi
+              isiannya, mengubah isian cuma memadamkan presetnya. */}
+          <DateRangeFilter
+            value={range}
+            onChange={setRange}
+            presets={MACRO_PRESETS}
+            label={t('market.rangePeriod')}
+            fromLabel={t('market.rangeFrom')}
+            toLabel={t('market.rangeTo')}
+            clearLabel={t('market.rangeAll')}
+            invalidMessage={t('market.rangeInvalid')}
+            max={today}
+          />
 
-        {loading && !data && <CenteredLoading label={t('common.loading')} />}
-        {error && (
-          <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
-        )}
-        {data && (
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {cards.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setSelectedId(c.id)}
-                className="text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 hover:opacity-90 transition-opacity"
-              >
-                <SeriesCard card={c} label={macroLabel(c, t)} emptyText={t('market.noMatches')} />
-              </button>
-            ))}
-          </div>
-        )}
+          {loading && !data && <CenteredLoading label={t('common.loading')} />}
+          {error && (
+            <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
+          )}
+          {data && (
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {cards.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelectedId(c.id)}
+                  className="text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 hover:opacity-90 transition-opacity"
+                >
+                  <SeriesCard card={c} label={macroLabel(c, t)} emptyText={t('market.noMatches')} />
+                </button>
+              ))}
+            </div>
+          )}
+        </Container>
       </div>
       {selected && (
-        <MacroDetailModal card={selected} label={macroLabel(selected, t)} onClose={() => setSelectedId(null)} />
+        <MacroDetailModal
+          card={selected}
+          label={macroLabel(selected, t)}
+          boardRange={range}
+          onClose={() => setSelectedId(null)}
+        />
       )}
     </div>
   )
 }
 
-/** Full-history detail for one macro series, opened by clicking its card:
- *  backdrop + big chart + a scrollable table of the value's progression. */
-function MacroDetailModal({ card, label, onClose }: { card: MacroSeriesCard; label: string; onClose: () => void }) {
+/**
+ * Full-history detail for one macro series, opened by clicking its card:
+ * backdrop + big chart + a scrollable table of the value's progression.
+ *
+ * Jendela ini sengaja menampilkan SELURUH riwayat dan mengabaikan jendela
+ * tanggal yang sedang aktif di papan. Itu keputusan pemilik dan tetap
+ * dipertahankan, tapi harus diberi tanda: tanpa penanda, angka Min dan Max
+ * di sini tidak akan cocok dengan kartu di belakangnya dan orang mengira
+ * datanya salah.
+ */
+function MacroDetailModal({ card, label, boardRange, onClose }: { card: MacroSeriesCard; label: string; boardRange: FilterRange; onClose: () => void }) {
+  const { t } = useTranslation()
+  const windowed = Boolean(boardRange.from || boardRange.to)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -458,28 +466,39 @@ function MacroDetailModal({ card, label, onClose }: { card: MacroSeriesCard; lab
       aria-modal="true"
     >
       <div
-        className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-accent/20 bg-bg-secondary/95 backdrop-blur-xl shadow-2xl"
+        className="w-full max-w-2xl max-h-[85dvh] flex flex-col rounded-2xl border border-accent/20 bg-bg-secondary/95 backdrop-blur-xl shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
-          <div className="flex flex-col">
-            <span className="text-[15px] font-semibold text-text">{label}</span>
+          <div className="flex min-w-0 flex-col">
+            <span className="text-[15px] font-semibold text-text [overflow-wrap:anywhere]">{label}</span>
             <span className="text-[11px] font-mono text-text-muted">{card.id} · {card.latestDate ?? ''}</span>
           </div>
-          <button type="button" onClick={onClose} className="text-text-muted hover:text-text px-2 py-1 rounded-md hover:bg-bg-tertiary" aria-label="close">✕</button>
+          <button type="button" onClick={onClose} className="shrink-0 text-text-muted hover:text-text px-2 py-1 rounded-md hover:bg-bg-tertiary" aria-label={t('market.macroClose')}>✕</button>
         </div>
 
         <div className="px-5 py-4 flex flex-col gap-4 overflow-y-auto min-h-0">
+          {/* Penanda yang bikin Min / Max / Sejak di bawah masuk akal walau
+              papannya sedang disaring ke rentang yang jauh lebih pendek. */}
+          <p className="rounded-md border border-border bg-bg-tertiary/50 px-3 py-2 text-[11px] leading-relaxed text-text-muted">
+            {t('market.macroFullHistory')}
+            {windowed && (
+              <span className="ml-1 font-mono text-text-muted/80">
+                {t('market.macroBoardRange', { from: boardRange.from || '…', to: boardRange.to || '…' })}
+              </span>
+            )}
+          </p>
+
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
-            <MacroStat label="Terkini" value={fmtSeriesValue(card, card.latest)} />
+            <MacroStat label={t('market.macroLatest')} value={fmtSeriesValue(card, card.latest)} />
             <MacroStat
-              label="Perubahan"
+              label={t('market.macroChange')}
               value={card.change == null ? '—' : `${card.change > 0 ? '+' : ''}${card.unit === 'count' ? fmtCompactNum(card.change) : card.change.toFixed(2)}`}
               tone={card.change == null || card.change === 0 ? undefined : card.change > 0 ? 'up' : 'down'}
             />
-            <MacroStat label="Min" value={fmtSeriesValue(card, min)} />
-            <MacroStat label="Max" value={fmtSeriesValue(card, max)} />
-            <MacroStat label="Sejak" value={first?.date ?? '—'} />
+            <MacroStat label={t('market.macroMin')} value={fmtSeriesValue(card, min)} />
+            <MacroStat label={t('market.macroMax')} value={fmtSeriesValue(card, max)} />
+            <MacroStat label={t('market.macroSince')} value={first?.date ?? '—'} />
           </div>
 
           <div className="h-64">
@@ -496,30 +515,30 @@ function MacroDetailModal({ card, label, onClose }: { card: MacroSeriesCard; lab
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-[12px] text-text-muted">Tidak ada data</div>
+              <div className="h-full flex items-center justify-center text-[12px] text-text-muted">{t('market.noData')}</div>
             )}
           </div>
 
-          <div className="border border-border rounded-lg overflow-hidden">
-            <div className="max-h-56 overflow-y-auto">
-              <table className="w-full text-[12px] border-collapse">
-                <thead className="sticky top-0 bg-bg-tertiary">
-                  <tr className="text-text-muted text-left">
-                    <th className="py-1.5 px-3 font-mono uppercase text-[11px] tracking-wide">Tanggal</th>
-                    <th className="py-1.5 px-3 font-mono uppercase text-[11px] tracking-wide text-right">Nilai</th>
+          {/* Dulu pembungkusnya `overflow-hidden` dan memotong kolom di layar
+              sempit. TableScroll menggeser mendatar dan tegak sekaligus. */}
+          <TableScroll maxHeight="14rem" label={label}>
+            <table className="w-full text-[12px] border-collapse">
+              <thead className="sticky top-0 bg-bg-tertiary">
+                <tr className="text-text-muted text-left">
+                  <th className="py-1.5 px-3 font-mono uppercase text-[11px] tracking-wide">{t('market.colDate')}</th>
+                  <th className="py-1.5 px-3 font-mono uppercase text-[11px] tracking-wide text-right">{t('market.colValue')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((p) => (
+                  <tr key={p.date} className="border-t border-border/60">
+                    <td className="py-1 px-3 font-mono text-text-muted">{p.date}</td>
+                    <td className="py-1 px-3 font-mono text-text text-right tabular-nums">{fmtSeriesValue(card, p.value)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((p) => (
-                    <tr key={p.date} className="border-t border-border/60">
-                      <td className="py-1 px-3 font-mono text-text-muted">{p.date}</td>
-                      <td className="py-1 px-3 font-mono text-text text-right tabular-nums">{fmtSeriesValue(card, p.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                ))}
+              </tbody>
+            </table>
+          </TableScroll>
         </div>
       </div>
     </div>
@@ -575,15 +594,17 @@ function TermStructureBoardView() {
         }
         live={{ lastUpdated: updatedAt }}
       />
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 flex flex-col gap-6 min-h-0">
-        {loading && !data && <CenteredLoading label={t('common.loading')} />}
-        {error && (
-          <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
-        )}
-        {data?.errors && Object.entries(data.errors).map(([sym, msg]) => (
-          <div key={sym} className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{sym}: {msg}</div>
-        ))}
-        {data?.curves.map((curve) => <TermCurveCard key={curve.symbol} curve={curve} />)}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <Container size="wide" className="flex flex-col gap-6 py-4">
+          {loading && !data && <CenteredLoading label={t('common.loading')} />}
+          {error && (
+            <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
+          )}
+          {data?.errors && Object.entries(data.errors).map(([sym, msg]) => (
+            <div key={sym} className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{sym}: {msg}</div>
+          ))}
+          {data?.curves.map((curve) => <TermCurveCard key={curve.symbol} curve={curve} />)}
+        </Container>
       </div>
     </div>
   )
@@ -658,40 +679,44 @@ function GlobalMacroBoardView() {
         }
         live={{ lastUpdated: updatedAt }}
       />
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 min-h-0">
-        {loading && !data && <CenteredLoading label={t('common.loading')} />}
-        {error && (
-          <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
-        )}
-        {data && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12px] border-collapse">
-              <thead>
-                <tr className="text-text-muted/70 text-left border-b border-border">
-                  <th className="py-1.5 pr-3 font-medium">{t('market.colCountry')}</th>
-                  <th className="py-1.5 px-3 font-medium text-right">{t('market.colCpiYoy')}</th>
-                  <th className="py-1.5 px-3 font-medium text-right">{t('market.colShortRate')}</th>
-                  <th className="py-1.5 px-3 font-medium text-right">{t('market.colCli')}</th>
-                  <th className="py-1.5 px-3 font-medium text-right">{t('market.colHousePrice')}</th>
-                  <th className="py-1.5 pl-3 font-medium text-right">{t('market.colSharePrice')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((r) => (
-                  <tr key={r.country} className="border-b border-border/50 hover:bg-bg-secondary/40">
-                    <td className="py-1.5 pr-3 text-text font-medium">{r.label}</td>
-                    <GlobalCell cell={r.cpiYoy} fmt={(v) => `${v.toFixed(2)}%`} colorBy="cpi" />
-                    <GlobalCell cell={r.shortRate} fmt={(v) => `${v.toFixed(2)}%`} />
-                    <GlobalCell cell={r.cli} fmt={(v) => v.toFixed(1)} colorBy="cli" />
-                    <GlobalCell cell={r.housePrice} fmt={(v) => v.toFixed(1)} />
-                    <GlobalCell cell={r.sharePrice} fmt={(v) => v.toFixed(1)} />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="mt-2 text-[10px] text-text-muted/60">{t('market.globalMacroNote')}</p>
-          </div>
-        )}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <Container size="wide" className="py-4">
+          {loading && !data && <CenteredLoading label={t('common.loading')} />}
+          {error && (
+            <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
+          )}
+          {data && (
+            <>
+              <TableScroll bordered={false} label={t('market.boardGlobalMacro')}>
+                <table className="w-full text-[12px] border-collapse">
+                  <thead>
+                    <tr className="text-text-muted/70 text-left border-b border-border">
+                      <th className="py-1.5 pr-3 font-medium">{t('market.colCountry')}</th>
+                      <th className="py-1.5 px-3 font-medium text-right">{t('market.colCpiYoy')}</th>
+                      <th className="py-1.5 px-3 font-medium text-right">{t('market.colShortRate')}</th>
+                      <th className="py-1.5 px-3 font-medium text-right">{t('market.colCli')}</th>
+                      <th className="py-1.5 px-3 font-medium text-right">{t('market.colHousePrice')}</th>
+                      <th className="py-1.5 pl-3 font-medium text-right">{t('market.colSharePrice')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.rows.map((r) => (
+                      <tr key={r.country} className="border-b border-border/50 hover:bg-bg-secondary/40">
+                        <td className="py-1.5 pr-3 text-text font-medium">{r.label}</td>
+                        <GlobalCell cell={r.cpiYoy} fmt={(v) => `${v.toFixed(2)}%`} colorBy="cpi" />
+                        <GlobalCell cell={r.shortRate} fmt={(v) => `${v.toFixed(2)}%`} />
+                        <GlobalCell cell={r.cli} fmt={(v) => v.toFixed(1)} colorBy="cli" />
+                        <GlobalCell cell={r.housePrice} fmt={(v) => v.toFixed(1)} />
+                        <GlobalCell cell={r.sharePrice} fmt={(v) => v.toFixed(1)} />
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TableScroll>
+              <p className="mt-2 text-[10px] text-text-muted/60">{t('market.globalMacroNote')}</p>
+            </>
+          )}
+        </Container>
       </div>
     </div>
   )
@@ -727,19 +752,21 @@ function ShippingBoardView() {
         }
         live={{ lastUpdated: updatedAt }}
       />
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 min-h-0">
-        {loading && !data && <CenteredLoading label={t('common.loading')} />}
-        {error && (
-          <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
-        )}
-        {data?.errors && Object.entries(data.errors).map(([key, msg]) => (
-          <div key={key} className="mb-3 text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{key}: {msg}</div>
-        ))}
-        {data && (
-          <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
-            {data.curves.map((c) => <ChokepointCard key={c.key} curve={c} />)}
-          </div>
-        )}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <Container size="wide" className="py-4">
+          {loading && !data && <CenteredLoading label={t('common.loading')} />}
+          {error && (
+            <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
+          )}
+          {data?.errors && Object.entries(data.errors).map(([key, msg]) => (
+            <div key={key} className="mb-3 text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{key}: {msg}</div>
+          ))}
+          {data && (
+            <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
+              {data.curves.map((c) => <ChokepointCard key={c.key} curve={c} />)}
+            </div>
+          )}
+        </Container>
       </div>
     </div>
   )
@@ -796,43 +823,45 @@ function FedBoardView() {
         }
         live={{ lastUpdated: updatedAt }}
       />
-      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 flex flex-col gap-5 min-h-0">
-        {loading && !data && <CenteredLoading label={t('common.loading')} />}
-        {error && (
-          <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
-        )}
-        {data?.errors && Object.entries(data.errors).map(([k, msg]) => (
-          <div key={k} className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{k}: {msg}</div>
-        ))}
-        {data && data.cards.length > 0 && (
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {data.cards.map((c) => (
-              <SeriesCard key={c.id} card={c} label={fedLabel(c.id, t) ?? c.label} emptyText={t('market.noMatches')} />
-            ))}
-          </div>
-        )}
-        {data && data.documents.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted/60">{t('market.fedDocuments')}</h3>
-            {data.documents.map((d) => (
-              <a
-                key={`${d.type}-${d.date}`}
-                href={d.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-3 px-3 py-1.5 rounded-md border border-border/60 bg-bg-secondary/30 hover:bg-bg-secondary text-[12px]"
-              >
-                <span className="font-mono text-text-muted shrink-0">{d.date}</span>
-                <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 ${
-                  d.type === 'statement' ? 'bg-accent/15 text-accent'
-                  : d.type === 'minutes' ? 'bg-green/15 text-green'
-                  : 'bg-bg-tertiary text-text-muted'
-                }`}>{d.type}</span>
-                <span className="text-text truncate">{d.title}</span>
-              </a>
-            ))}
-          </div>
-        )}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <Container size="wide" className="flex flex-col gap-5 py-4">
+          {loading && !data && <CenteredLoading label={t('common.loading')} />}
+          {error && (
+            <div className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{error}</div>
+          )}
+          {data?.errors && Object.entries(data.errors).map(([k, msg]) => (
+            <div key={k} className="text-[13px] text-red border border-red/30 rounded-md px-3 py-2 bg-red/5">{k}: {msg}</div>
+          ))}
+          {data && data.cards.length > 0 && (
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {data.cards.map((c) => (
+                <SeriesCard key={c.id} card={c} label={fedLabel(c.id, t) ?? c.label} emptyText={t('market.noMatches')} />
+              ))}
+            </div>
+          )}
+          {data && data.documents.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted/60">{t('market.fedDocuments')}</h3>
+              {data.documents.map((d) => (
+                <a
+                  key={`${d.type}-${d.date}`}
+                  href={d.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-3 px-3 py-1.5 rounded-md border border-border/60 bg-bg-secondary/30 hover:bg-bg-secondary text-[12px]"
+                >
+                  <span className="font-mono text-text-muted shrink-0">{d.date}</span>
+                  <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 ${
+                    d.type === 'statement' ? 'bg-accent/15 text-accent'
+                    : d.type === 'minutes' ? 'bg-green/15 text-green'
+                    : 'bg-bg-tertiary text-text-muted'
+                  }`}>{d.type}</span>
+                  <span className="text-text truncate">{d.title}</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </Container>
       </div>
     </div>
   )

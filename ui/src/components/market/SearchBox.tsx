@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { type BarSourceCandidate, type AssetClass } from '../../api/market'
 import { useAssetSearch } from './useAssetSearch'
 
@@ -21,10 +21,11 @@ const CAPABILITY_COLOR: Record<string, string> = {
 
 export function SearchBox() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState('')
   // Shared with the market sidebar — one federated search logic, no drift.
-  const { results, loading } = useAssetSearch(query)
+  const { results, loading, truncated, shown, showMore } = useAssetSearch(query)
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -50,6 +51,15 @@ export function SearchBox() {
     const next = new URLSearchParams(searchParams)
     next.set('source', r.barId)
     const assetClass: AssetClass = r.assetClass === 'unknown' ? 'equity' : r.assetClass
+    // Interval dan range cuma ikut selama kelas asetnya sama. Pindah dari
+    // ekuitas ke kripto berarti ganti sumber data juga, dan interval yang
+    // tadinya sah belum tentu didukung di sana. Dibawa mentah-mentah, chart
+    // di simbol baru langsung mendarat di pasangan yang tidak bisa dilayani,
+    // tanpa sebab yang kelihatan dari layar. Bawaannya dibiarkan berlaku.
+    if (assetClass !== currentAssetClass(location.pathname)) {
+      next.delete('interval')
+      next.delete('range')
+    }
     navigate({
       pathname: `/market/${assetClass}/${encodeURIComponent(r.symbol)}`,
       search: `?${next.toString()}`,
@@ -115,8 +125,30 @@ export function SearchBox() {
               </span>
             </button>
           ))}
+          {/* Tanpa baris ini, hasil ke-25 dan seterusnya hilang tanpa jejak. */}
+          {truncated && (
+            <div className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2 text-[12px] text-text-muted">
+              <span>Showing the first {shown} matches.</span>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={showMore}
+                className="cursor-pointer rounded px-1.5 py-0.5 text-text/80 transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+              >
+                Show more
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
   )
+}
+
+/** `/market/<assetClass>/<symbol>`, satu-satunya rute yang memakai kotak ini
+ *  bersama chart. Di halaman daftar hasilnya string kosong, dan itu memang
+ *  berarti "tidak ada kelas aset yang sedang dibuka". */
+function currentAssetClass(pathname: string): string {
+  const parts = pathname.split('/').filter(Boolean)
+  return parts[0] === 'market' && parts.length >= 3 ? parts[1] : ''
 }

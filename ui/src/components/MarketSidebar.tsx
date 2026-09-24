@@ -41,7 +41,7 @@ export function MarketSidebar() {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
   // Shared with the main search box — one search logic, no drift.
-  const { results, loading } = useAssetSearch(query)
+  const { results, loading, truncated, shown, showMore } = useAssetSearch(query)
 
   const watchlist = useWatchlist((s) => s.entries)
   const removeFromWatchlist = useWatchlist((s) => s.remove)
@@ -156,6 +156,19 @@ export function MarketSidebar() {
                 trail={<SourceTrail c={c} />}
               />
             ))}
+            {/* Batas hasilnya diberi tahu, bukan dibiarkan diam. */}
+            {truncated && (
+              <div className="px-3 py-2 flex flex-col items-start gap-1">
+                <span className="text-[11px] text-text-muted/70">{t('market.resultsTruncated', { shown })}</span>
+                <button
+                  type="button"
+                  onClick={showMore}
+                  className="cursor-pointer text-[12px] text-text/80 transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 rounded"
+                >
+                  {t('market.showMoreResults')}
+                </button>
+              </div>
+            )}
           </>
         )}
 

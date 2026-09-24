@@ -20,13 +20,18 @@ interface Props {
  * Panel shell used across the Market workbench.
  * Title + optional info hint + optional right slot + content. No
  * cross-panel smarts — each panel owns its own fetch and render.
+ *
+ * Kepalanya sekarang membungkus. Slot `right` sering diisi deretan tab
+ * (FinancialStatementsPanel menaruh empat di sana), dan di layar sempit
+ * empat tab plus judul tidak muat sebaris. Dulu judulnya yang mengalah jadi
+ * elipsis; sekarang tab-nya yang turun ke baris bawah dan judulnya utuh.
  */
 export function Card({ title, info, right, className, contentClassName, children }: Props) {
   return (
-    <section className={`flex flex-col border border-border rounded bg-bg-secondary/30 ${className ?? ''}`}>
-      <header className="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/60">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <h3 className="text-[13px] font-medium text-text truncate">{title}</h3>
+    <section className={`flex flex-col min-w-0 border border-border rounded bg-bg-secondary/30 ${className ?? ''}`}>
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2 border-b border-border/60">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 basis-[10rem]">
+          <h3 className="text-subhead text-text min-w-0 [overflow-wrap:anywhere]">{title}</h3>
           {info && (
             // Custom CSS-only tooltip via Tailwind's group/group-hover.
             // Native `title=` was the first instinct but the browser-level
@@ -48,9 +53,11 @@ export function Card({ title, info, right, className, contentClassName, children
             </span>
           )}
         </div>
-        {right && <div className="shrink-0">{right}</div>}
+        {right && (
+          <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">{right}</div>
+        )}
       </header>
-      <div className={contentClassName ?? 'p-3'}>{children}</div>
+      <div className={`min-w-0 ${contentClassName ?? 'p-3'}`}>{children}</div>
     </section>
   )
 }
