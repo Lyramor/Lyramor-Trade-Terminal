@@ -40,6 +40,7 @@ import {
   quickChat as apiQuickChat,
   resumeSession as apiResumeSession,
   spawnSession,
+  spawnChatSession,
   type AgentInfo,
   type SessionRecord,
   type TemplateInfo,
@@ -54,6 +55,19 @@ export interface SpawnOpts {
   readonly agent?: string
   /** Seed a fresh session with a first message (quick-chat). Ignored when resuming. */
   readonly initialPrompt?: string
+  /**
+   * Force a transport instead of letting `spawn` choose.
+   *
+   * Default (absent) = chat whenever the resolved agent advertises the chat
+   * capability, else the PTY. Pass `'pty'` for the explicit "New terminal"
+   * affordance — that's the ONLY way to get a raw terminal on a chat-capable
+   * agent, so the terminal stays reachable without being what a user lands on
+   * by accident.
+   *
+   * Chat can't be forced ON: a `'chat'` request for an agent without the
+   * capability would just 400 at the backend, so it degrades to the PTY.
+   */
+  readonly transport?: 'pty' | 'chat'
 }
 
 interface WorkspacesContextValue {
@@ -153,10 +167,31 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
     }
   }, [hasLoaded, workspaces, closeTab])
 
+  /**
+   * Whether an agent can drive the chat UI. Read off the backend's advertised
+   * capabilities rather than comparing against `'claude'`, so the day another
+   * runtime gains stream-json chat it needs no frontend change. Unknown agent
+   * or older backend (no `chat` field) → false → PTY.
+   */
+  const agentSupportsChat = useCallback(
+    (agentId: string | undefined): boolean =>
+      agentId !== undefined && agents.find((a) => a.id === agentId)?.capabilities.chat === true,
+    [agents],
+  )
+
   const spawn = useCallback(
     async (wsId: string, opts: SpawnOpts = {}): Promise<void> => {
       try {
-        const sess = await spawnSession(wsId, opts)
+        // Chat is the default surface: every generic "new session" path (the
+        // header button, ⌘T, the empty state, the sidebar) lands here, and a
+        // terminal is not what most people want to be dropped into. `agents[0]`
+        // mirrors the backend's own default-adapter resolution.
+        const agentId = opts.agent ?? workspaces.find((w) => w.id === wsId)?.agents[0]
+        const useChat = opts.transport !== 'pty' && agentSupportsChat(agentId)
+
+        const sess = useChat
+          ? await spawnChatSession(wsId, opts.agent)
+          : await spawnSession(wsId, opts)
         const nowIso = new Date().toISOString()
         const newRecord: SessionRecord = {
           id: sess.sessionId,
@@ -170,6 +205,11 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
           pid: sess.pid,
           startedAt: sess.startedAt,
           title: sess.title,
+          // Must be on the OPTIMISTIC record, not just the polled one: the tab
+          // opens immediately below, and a record without this renders as a
+          // terminal until the next 3s refresh — a visible flash of the exact
+          // wrong UI.
+          transport: useChat ? 'chat' : 'pty',
         }
         setWorkspaces((prev) =>
           prev.map((w) =>
@@ -182,7 +222,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
         console.error('workspaces.spawn_failed', { wsId, opts, err })
       }
     },
-    [refresh, openOrFocus],
+    [refresh, openOrFocus, workspaces, agentSupportsChat],
   )
 
   const quickChat = useCallback(

@@ -1,4 +1,4 @@
-# OpenAlice
+# Lyramor
 
 AI trading agent. From a code-writing perspective, the Alice process is two
 things: a **Workspace launcher** (PTY sessions running native agent CLIs —
@@ -198,7 +198,7 @@ migration framework at `src/migrations/`, not ad-hoc startup code.
 
 ## Project Structure
 
-OpenAlice is a pnpm monorepo. Two long-running processes (Alice + UTA),
+Lyramor is a pnpm monorepo. Two long-running processes (Alice + UTA),
 supervised by Guardian, sharing one `data/` volume. Filesystem layout
 roughly mirrors that split — `src/` is Alice, `services/uta/` is UTA,
 `packages/` is what they wire across.
@@ -353,7 +353,7 @@ workspaces/                    # WORKSPACE LAUNCHER ROOT — a SIBLING global ro
 
 ### Workspaces — the cost-curve-inversion mechanism
 
-`src/workspaces/` is OpenAlice's most important architectural surface and
+`src/workspaces/` is Lyramor's most important architectural surface and
 the reason recent feature work has been compounding cheaply. A workspace
 is a managed, persistent shell session (PTY-backed, scrollback-replayed,
 template-bootstrapped) inside which an AI agent runs an entire capability
@@ -495,7 +495,7 @@ headless workspace dispatch (cron → workspace).
 
 ### External PRs — quarantine and scan before any local checkout
 
-OpenAlice's main repo holds broker credentials (trading domain, UTA
+Lyramor's main repo holds broker credentials (trading domain, UTA
 private keys, exchange API tokens), so external code can never be trusted
 blindly. But the project is opening to community contributions and the
 needs are community-raised, so the rule is no longer a flat refusal — it's
@@ -522,7 +522,7 @@ evaluate / merge PR #N":
    postinstall / dep substitution / payload / prompt-injection. Only after
    the sandbox clears it does a checkout happen — and even a clean PR is
    taken as a **reference to evaluate and reimplement in-house**, never
-   branch-merged. OpenAlice's architecture and philosophy are shifting fast
+   branch-merged. Lyramor's architecture and philosophy are shifting fast
    right now; merging external code (even code that scans clean) risks
    importing community anti-patterns, so staying the sole author is
    deliberate, not just an IP stance — see *Recognizing contributors —

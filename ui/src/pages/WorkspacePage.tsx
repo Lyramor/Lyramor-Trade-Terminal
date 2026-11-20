@@ -17,7 +17,7 @@
  */
 
 import { useEffect } from 'react'
-import { Plus } from 'lucide-react'
+import { MessageSquare, Plus } from 'lucide-react'
 import '@xterm/xterm/css/xterm.css'
 
 import { useWorkspaces } from '../contexts/WorkspacesContext'
@@ -86,14 +86,29 @@ export function WorkspacePage({ spec, visible }: Props) {
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-bg-secondary/30 shrink-0">
         <span className="text-[12px] text-text-muted font-medium">{workspace.tag}</span>
         <div className="flex items-center gap-1">
+          {/* `ctx.spawn` picks chat for chat-capable agents, so this is the
+            * plain "new session" affordance — no separate "New chat" button
+            * anymore, since chat IS the default now. */}
           <button
             type="button"
             onClick={() => void ctx.spawn(wsId, {})}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-accent hover:bg-accent/10 transition-colors"
+            title="Start a new session in this workspace (⌘T)"
+          >
+            <MessageSquare size={13} strokeWidth={2.25} aria-hidden="true" />
+            New chat
+          </button>
+          {/* The escape hatch: the raw PTY is still one click away for anyone
+            * who wants the real CLI (and it's the only surface for agents
+            * without a chat mode). */}
+          <button
+            type="button"
+            onClick={() => void ctx.spawn(wsId, { transport: 'pty' })}
             className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-text-muted hover:text-text hover:bg-bg-tertiary transition-colors"
-            title="Spawn a fresh session in this workspace (⌘T)"
+            title="Spawn a raw terminal session (the CLI TUI) in this workspace"
           >
             <Plus size={13} strokeWidth={2.25} aria-hidden="true" />
-            New session
+            New terminal
           </button>
           <WorkspaceFilesToggle />
           <button

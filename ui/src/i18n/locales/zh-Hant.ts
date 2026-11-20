@@ -334,7 +334,7 @@ export const zhHant: Resources = {
     emptyBody: '未發現任何模板。請檢查發射架的模板目錄。',
     communityTitle: '社群',
     communityDescription:
-      '第三方生態的打包模板——建立工作區時從上游倉庫全新 clone，由原作者維護，而非 OpenAlice。',
+      '第三方生態的打包模板——建立工作區時從上游倉庫全新 clone，由原作者維護，而非 Lyramor。',
     communityBadge: '社群',
     agentsLabel: 'Agents',
     agentNotInstalled: '本機未安裝',
@@ -355,7 +355,7 @@ export const zhHant: Resources = {
     create: '建立工作區',
   },
   auth: {
-    heading: '登入 OpenAlice',
+    heading: '登入 Lyramor',
     instruction: '貼上首次啟動時顯示的管理員權杖。',
     adminTokenLabel: '管理員權杖',
     signingIn: '登入中…',

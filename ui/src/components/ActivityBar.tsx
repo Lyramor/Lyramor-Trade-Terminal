@@ -212,12 +212,12 @@ export function ActivityBar({ open, onClose, onItemActivated, sidebarVisible = t
             (all three top surfaces share the 40px header rhythm). */}
         <div className="h-10 px-4 flex items-center gap-2.5 shrink-0">
           <img
-            src="/alice.ico"
-            alt="Alice"
-            className="w-6 h-6 rounded-full ring-1 ring-border shadow-[0_0_14px_var(--color-accent-dim)]"
+            src="/lyramor-icon.png"
+            alt="Lyramor"
+            className="w-6 h-6 p-1 rounded-lg bg-[#0f1219] ring-1 ring-border shadow-[0_0_14px_var(--color-accent-dim)]"
             draggable={false}
           />
-          <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-text">OpenAlice</h1>
+          <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-text">Lyramor</h1>
         </div>
 
         {/* Navigation */}

@@ -25,7 +25,7 @@ export function MCPPage() {
     <div className="flex flex-col flex-1 min-h-0">
       <PageHeader
         title="MCP Server"
-        description="Streamable-HTTP endpoint that exposes OpenAlice's ToolCenter to external MCP clients. Changes require a restart."
+        description="Streamable-HTTP endpoint that exposes Lyramor's ToolCenter to external MCP clients. Changes require a restart."
         right={<SaveIndicator status={status} onRetry={retry} />}
       />
 

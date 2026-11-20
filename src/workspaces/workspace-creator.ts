@@ -302,10 +302,10 @@ interface RunResult {
 }
 
 const WINDOWS_BASH_HINT =
-  'hint: this template ships a bash bootstrap script. OpenAlice\'s built-in ' +
+  'hint: this template ships a bash bootstrap script. Lyramor\'s built-in ' +
   'templates (chat, auto-quant) need no bash — only third-party templates do. ' +
   'To use this one, install Git for Windows from https://gitforwindows.org/ so ' +
-  'bash is on PATH, or run OpenAlice from inside WSL2.';
+  'bash is on PATH, or run Lyramor from inside WSL2.';
 
 /**
  * Run a bootstrap script.

@@ -15,7 +15,7 @@ export function DemoTerminalStub({ label }: DemoTerminalStubProps): ReactElement
           Agent terminal
         </div>
         <div className="text-sm leading-relaxed text-zinc-400">
-          In a real OpenAlice install, this pane is a live PTY running{' '}
+          In a real Lyramor install, this pane is a live PTY running{' '}
           <span className="text-zinc-300">Claude Code</span>,{' '}
           <span className="text-zinc-300">Codex</span>, or{' '}
           <span className="text-zinc-300">shell</span> — the AI agent drives it directly: reads files, runs commands, reports back.
@@ -30,7 +30,7 @@ export function DemoTerminalStub({ label }: DemoTerminalStubProps): ReactElement
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs font-medium text-amber-400 hover:underline"
           >
-            Install OpenAlice locally →
+            Install Lyramor locally →
           </a>
         </div>
       </div>

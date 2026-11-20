@@ -1,20 +1,20 @@
-# Running OpenTypeBB with OpenAlice
+# Menjalankan OpenTypeBB dengan Lyramor
 
-OpenTypeBB is a TypeScript-native port of the [OpenBB Platform](https://github.com/OpenBB-finance/OpenBB) — the open-source financial data infrastructure. It ships as an internal package (`@traderalice/opentypebb`) inside OpenAlice, giving you access to equity, crypto, currency, commodity, economy, and news data without spinning up a Python sidecar or messing with `uv`.
+OpenTypeBB adalah port TypeScript-native dari [OpenBB Platform](https://github.com/OpenBB-finance/OpenBB) — infrastruktur data finansial open-source. Ia dikemas sebagai package internal (`@traderalice/opentypebb`) di dalam Lyramor, memberi Anda akses ke data equity, crypto, currency, commodity, economy, dan news tanpa perlu menjalankan sidecar Python atau berurusan dengan `uv`.
 
-This tutorial walks you through getting OpenAlice up and running with OpenTypeBB as the data backend.
+Tutorial ini memandu Anda menjalankan Lyramor dengan OpenTypeBB sebagai data backend.
 
 ---
 
-## Prerequisites
+## Prasyarat
 
-| Requirement | Version |
+| Kebutuhan | Versi |
 |-------------|---------|
 | [Node.js](https://nodejs.org/) | 22+ |
 | [pnpm](https://pnpm.io/) | 10+ |
-| [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | latest (installed & authenticated) |
+| [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) | terbaru (terpasang & terautentikasi) |
 
-That's it. No Python, no `uv`, no Docker.
+Hanya itu. Tanpa Python, tanpa `uv`, tanpa Docker.
 
 ---
 
@@ -27,23 +27,23 @@ pnpm install
 pnpm build
 ```
 
-`pnpm install` resolves the monorepo workspace — the `@traderalice/opentypebb` package under `packages/opentypebb/` is linked automatically.
+`pnpm install` me-resolve workspace monorepo — package `@traderalice/opentypebb` di bawah `packages/opentypebb/` di-link secara otomatis.
 
-## 2. Start the Dev Server
+## 2. Menjalankan Dev Server
 
 ```bash
 pnpm dev
 ```
 
-Open [http://localhost:3002](http://localhost:3002) and start chatting. No API keys or extra config required — the default setup uses Claude Code as the AI backend with your existing login, and OpenTypeBB as the data engine via in-process SDK mode.
+Buka [http://localhost:3002](http://localhost:3002) dan mulai mengobrol. Tidak perlu API key atau konfigurasi tambahan — setup default menggunakan Claude Code sebagai AI backend dengan login Anda yang sudah ada, dan OpenTypeBB sebagai mesin data melalui mode in-process SDK.
 
-> For frontend hot-reload during development, run `pnpm dev:ui` (port 5173) in a separate terminal.
+> Untuk hot-reload frontend selama pengembangan, jalankan `pnpm dev:ui` (port 5173) di terminal terpisah.
 
-## 3. Verify OpenTypeBB Is Active
+## 3. Memverifikasi OpenTypeBB Aktif
 
-OpenTypeBB is the **default** data backend. You don't need to configure anything — it's already on.
+OpenTypeBB adalah data backend **default**. Anda tidak perlu mengonfigurasi apa pun — ia sudah aktif.
 
-Under the hood, OpenAlice reads `data/config/market-data.json`. If that file doesn't exist yet, it falls back to these defaults:
+Di balik layar, Lyramor membaca `data/config/market-data.json`. Jika file tersebut belum ada, ia akan fallback ke default berikut:
 
 ```json
 {
@@ -62,38 +62,38 @@ Under the hood, OpenAlice reads `data/config/market-data.json`. If that file doe
 }
 ```
 
-Key settings:
+Pengaturan utama:
 
-- **`backend: "typebb-sdk"`** — This is the in-process mode. OpenTypeBB's `QueryExecutor` runs directly inside the Node.js process — no HTTP, no sidecar. This is the default.
-- **`backend: "openbb-api"`** — Switches to making HTTP requests to an external OpenBB-compatible API server. You probably don't want this.
-- **`providers`** — Which data provider to use per asset class. `yfinance` works out of the box with no API key.
+- **`backend: "typebb-sdk"`** — Ini adalah mode in-process. `QueryExecutor` milik OpenTypeBB berjalan langsung di dalam proses Node.js — tanpa HTTP, tanpa sidecar. Ini adalah default.
+- **`backend: "openbb-api"`** — Beralih ke pengiriman HTTP request ke server API eksternal yang kompatibel dengan OpenBB. Kemungkinan besar Anda tidak menginginkan ini.
+- **`providers`** — Provider data mana yang digunakan per asset class. `yfinance` langsung bekerja tanpa API key.
 
-## 4. Available Data Providers
+## 4. Data Provider yang Tersedia
 
-OpenTypeBB ships with 14 providers:
+OpenTypeBB hadir dengan 14 provider:
 
-| Provider | Covers | API Key? |
+| Provider | Mencakup | API Key? |
 |----------|--------|----------|
-| **yfinance** | Equity, crypto, currency, news | No |
-| **fmp** | Equity fundamentals, news, discovery | Required |
-| **intrinio** | Options data | Required |
-| **eia** | Energy (petroleum, natural gas, electricity) | Required |
-| **econdb** | Global economic data | Optional (higher rate limits) |
-| **federal_reserve** | FRED, FOMC, payrolls, PCE, Michigan, etc. | Optional (higher rate limits) |
-| **bls** | Bureau of Labor Statistics employment data | Optional (higher rate limits) |
-| **deribit** | Crypto derivatives | No |
-| **cboe** | Index data | No |
-| **multpl** | S&P 500 multiples (PE, earnings yield) | No |
-| **oecd** | GDP, economic indicators | No |
-| **imf** | International trade, CPI, balance of payments | No |
-| **ecb** | European balance of payments | No |
-| **stub** | Test/placeholder | No |
+| **yfinance** | Equity, crypto, currency, news | Tidak |
+| **fmp** | Fundamental equity, news, discovery | Wajib |
+| **intrinio** | Data options | Wajib |
+| **eia** | Energi (petroleum, gas alam, listrik) | Wajib |
+| **econdb** | Data ekonomi global | Opsional (rate limit lebih tinggi) |
+| **federal_reserve** | FRED, FOMC, payrolls, PCE, Michigan, dll. | Opsional (rate limit lebih tinggi) |
+| **bls** | Data ketenagakerjaan Bureau of Labor Statistics | Opsional (rate limit lebih tinggi) |
+| **deribit** | Derivatif crypto | Tidak |
+| **cboe** | Data indeks | Tidak |
+| **multpl** | Multiple S&P 500 (PE, earnings yield) | Tidak |
+| **oecd** | GDP, indikator ekonomi | Tidak |
+| **imf** | Perdagangan internasional, CPI, balance of payments | Tidak |
+| **ecb** | Balance of payments Eropa | Tidak |
+| **stub** | Test/placeholder | Tidak |
 
-**Most things work without any API key** — `yfinance` covers equity quotes, crypto prices, forex rates, and company news. `federal_reserve`, `bls`, and `econdb` also work keyless but with stricter rate limits. Only `fmp`, `intrinio`, and `eia` strictly require a key.
+**Sebagian besar fitur bekerja tanpa API key** — `yfinance` mencakup kuotasi equity, harga crypto, kurs forex, dan berita perusahaan. `federal_reserve`, `bls`, dan `econdb` juga bekerja tanpa key namun dengan rate limit yang lebih ketat. Hanya `fmp`, `intrinio`, dan `eia` yang benar-benar mewajibkan key.
 
-## 5. Adding API Keys (Optional)
+## 5. Menambahkan API Key (Opsional)
 
-To unlock additional providers (FMP, EIA, Intrinio, etc.), create or edit `data/config/market-data.json`:
+Untuk membuka provider tambahan (FMP, EIA, Intrinio, dll.), buat atau edit `data/config/market-data.json`:
 
 ```json
 {
@@ -104,57 +104,57 @@ To unlock additional providers (FMP, EIA, Intrinio, etc.), create or edit `data/
 }
 ```
 
-Or set them through the Web UI: open [http://localhost:3002](http://localhost:3002), go to the config panel, and edit the OpenBB section. Changes take effect immediately — no restart needed.
+Atau atur melalui Web UI: buka [http://localhost:3002](http://localhost:3002), pergi ke panel config, dan edit bagian OpenBB. Perubahan langsung berlaku — tidak perlu restart.
 
-The key names map to OpenBB credential fields automatically:
-`fmp` → `fmp_api_key`, `eia` → `eia_api_key`, `fred` → `fred_api_key`, etc.
+Nama key dipetakan ke field credential OpenBB secara otomatis:
+`fmp` → `fmp_api_key`, `eia` → `eia_api_key`, `fred` → `fred_api_key`, dll.
 
-## 6. What Can You Do?
+## 6. Apa yang Bisa Anda Lakukan?
 
-Once running, Alice has access to a rich set of market data tools powered by OpenTypeBB:
+Setelah berjalan, Alice memiliki akses ke serangkaian tool market data yang kaya, ditenagai oleh OpenTypeBB:
 
 ### Market Search
-Ask Alice to find any symbol across equities, crypto, and forex:
+Minta Alice mencari simbol apa pun di equity, crypto, dan forex:
 > "Search for Tesla stock"
 > "Find crypto pairs with SOL"
 
-### Equity Data
-- Price quotes and historical OHLCV
-- Company profiles and financial statements
-- Analyst estimates and earnings calendar
-- Insider trading and institutional ownership
-- Market movers (top gainers, losers, most active)
+### Data Equity
+- Kuotasi harga dan OHLCV historis
+- Profil perusahaan dan laporan keuangan
+- Estimasi analis dan kalender earnings
+- Insider trading dan kepemilikan institusional
+- Market movers (top gainers, losers, paling aktif)
 
 ### Crypto & Forex
-- Real-time price data
-- Historical OHLCV with configurable intervals
+- Data harga real-time
+- OHLCV historis dengan interval yang dapat dikonfigurasi
 
-### Technical Analysis
-Built-in indicator calculator with formula expressions:
+### Analisis Teknikal
+Kalkulator indikator bawaan dengan ekspresi formula:
 > "Calculate RSI(14) for AAPL on the daily chart"
 > "Show me the 50-day and 200-day SMA crossover for BTC/USD"
 
-Uses syntax like `SMA(CLOSE('AAPL', '1d'), 50)`, `RSI(CLOSE('BTC/USD', '1d'), 14)`, etc.
+Menggunakan sintaks seperti `SMA(CLOSE('AAPL', '1d'), 50)`, `RSI(CLOSE('BTC/USD', '1d'), 14)`, dll.
 
-### Economy & Macro
-- GDP data (OECD, IMF)
-- FRED economic series (rates, inflation, employment)
-- PCE, CPI, nonfarm payrolls, FOMC documents
-- University of Michigan consumer sentiment
-- Fed manufacturing outlook surveys
+### Economy & Makro
+- Data GDP (OECD, IMF)
+- Seri ekonomi FRED (suku bunga, inflasi, ketenagakerjaan)
+- PCE, CPI, nonfarm payrolls, dokumen FOMC
+- Sentimen konsumen University of Michigan
+- Survei outlook manufaktur Fed
 
-### Commodities
-- EIA petroleum & natural gas data
-- Spot commodity prices
+### Komoditas
+- Data petroleum & gas alam EIA
+- Harga spot komoditas
 
 ### News
-- Company-specific news
-- World market news
-- Background RSS collection with searchable archive
+- Berita spesifik per perusahaan
+- Berita pasar dunia
+- Pengumpulan RSS di latar belakang dengan arsip yang dapat dicari
 
-## 7. Running OpenTypeBB as a Standalone HTTP Server
+## 7. Menjalankan OpenTypeBB sebagai Standalone HTTP Server
 
-If you want to use OpenTypeBB independently — for example, to connect it to [OpenBB Workspace](https://pro.openbb.co) or other tools — you can run it as a standalone API server:
+Jika Anda ingin menggunakan OpenTypeBB secara independen — misalnya, untuk menghubungkannya ke [OpenBB Workspace](https://pro.openbb.co) atau tool lain — Anda dapat menjalankannya sebagai standalone API server:
 
 ```bash
 # From the repo root:
@@ -167,15 +167,15 @@ export FMP_API_KEY=your_key_here
 npx tsx src/server.ts
 ```
 
-The server starts on port 6901 (configurable via `OPENTYPEBB_PORT`):
+Server akan berjalan pada port 6901 (dapat dikonfigurasi via `OPENTYPEBB_PORT`):
 ```
 Built widgets.json with 88 widgets
 OpenTypeBB listening on http://localhost:6901
 ```
 
-### API Endpoints
+### Endpoint API
 
-The server exposes OpenBB-compatible REST endpoints:
+Server mengekspos endpoint REST yang kompatibel dengan OpenBB:
 
 ```bash
 # Health check
@@ -204,9 +204,9 @@ curl -H 'X-OpenBB-Credentials: {"fmp_api_key": "your_key"}' \
 curl http://localhost:6901/widgets.json
 ```
 
-### Embedded Server Mode
+### Mode Embedded Server
 
-You can also run the API server embedded inside OpenAlice (alongside the agent). Edit `data/config/market-data.json`:
+Anda juga dapat menjalankan API server tertanam (embedded) di dalam Lyramor (berdampingan dengan agent). Edit `data/config/market-data.json`:
 
 ```json
 {
@@ -217,11 +217,11 @@ You can also run the API server embedded inside OpenAlice (alongside the agent).
 }
 ```
 
-Then `pnpm dev` will start both Alice and the OpenTypeBB HTTP API.
+Kemudian `pnpm dev` akan menjalankan baik Alice maupun OpenTypeBB HTTP API.
 
-## 8. Using OpenTypeBB as a Library
+## 8. Menggunakan OpenTypeBB sebagai Library
 
-You can also import OpenTypeBB directly in your own TypeScript project:
+Anda juga dapat meng-import OpenTypeBB secara langsung di proyek TypeScript Anda sendiri:
 
 ```typescript
 import { createExecutor } from '@traderalice/opentypebb'
@@ -250,10 +250,10 @@ const income = await executor.execute('fmp', 'IncomeStatement', {
 })
 ```
 
-## 9. Architecture Overview
+## 9. Sekilas Arsitektur
 
 ```
-OpenAlice
+Lyramor
 ├── packages/opentypebb/          # The OpenTypeBB library
 │   ├── src/
 │   │   ├── index.ts              # Library entry point
@@ -285,7 +285,7 @@ OpenAlice
 └── data/config/market-data.json       # Runtime configuration
 ```
 
-**Data flow (SDK mode):**
+**Alur data (mode SDK):**
 ```
 Alice asks for AAPL quote
   → ToolCenter dispatches to equity extension
@@ -295,7 +295,7 @@ Alice asks for AAPL quote
           → Returns structured data
 ```
 
-No HTTP. No Python. No sidecar. Just TypeScript all the way down.
+Tanpa HTTP. Tanpa Python. Tanpa sidecar. Murni TypeScript dari hulu ke hilir.
 
 ---
 
@@ -309,4 +309,4 @@ pnpm dev
 # Open http://localhost:3002 and ask Alice about any stock, crypto, or macro data
 ```
 
-Everything works out of the box. OpenTypeBB is the default data backend, `yfinance` is the default provider, and neither requires an API key. Add keys to `data/config/market-data.json` when you want to unlock more providers.
+Semuanya bekerja langsung tanpa konfigurasi. OpenTypeBB adalah data backend default, `yfinance` adalah provider default, dan keduanya tidak memerlukan API key. Tambahkan key ke `data/config/market-data.json` saat Anda ingin membuka lebih banyak provider.

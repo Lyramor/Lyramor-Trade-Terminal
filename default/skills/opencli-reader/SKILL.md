@@ -11,7 +11,7 @@ description: >
   reddit / 雪球 saying about X", "unusual options flow on Y", "TVL of Z",
   "Bloomberg headlines", "northbound flow today", "search arXiv for…", any
   read from a site Alice has no tool for. READ-ONLY — never invoke write
-  commands. opencli is NOT bundled with OpenAlice: if it's missing and a task
+  commands. opencli is NOT bundled with Lyramor: if it's missing and a task
   would benefit, you MUST say so and ask the user — never install silently,
   never silently work with thinner data.
 ---
@@ -20,7 +20,7 @@ description: >
 
 [opencli](https://github.com/jackwener/opencli) is an independent community
 CLI that turns ~160 websites and desktop apps into a uniform
-`opencli <site> <command>` surface. OpenAlice does not bundle or install it —
+`opencli <site> <command>` surface. Lyramor does not bundle or install it —
 this skill teaches you to use it **when the user has it**, and to **ask for
 it** when a task needs data only it can reach.
 
@@ -161,7 +161,7 @@ limits; wait and retry once before declaring breakage.
 
 ---
 
-*Maintained by OpenAlice. Doctrine follows the official
+*Maintained by Lyramor. Doctrine follows the official
 [jackwener/opencli](https://github.com/jackwener/opencli) skills; structure
 informed by `opencli-reader` in
 [himself65/finance-skills](https://github.com/himself65/finance-skills)

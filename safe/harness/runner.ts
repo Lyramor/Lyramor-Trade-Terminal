@@ -104,7 +104,7 @@ function reportSummary(results: CaseResult[]): void {
 }
 
 async function main(): Promise<void> {
-  console.log('OpenAlice red-team harness — scaffold runner')
+  console.log('Lyramor red-team harness — scaffold runner')
   console.log('')
 
   const playbooks = await listPlaybooks()

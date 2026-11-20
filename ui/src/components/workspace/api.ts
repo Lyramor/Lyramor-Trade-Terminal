@@ -164,6 +164,13 @@ export interface AgentCapabilities {
   readonly resumeLast: boolean;
   readonly resumeById: boolean;
   readonly transcriptDiscovery: 'fs-watch' | 'subprocess' | 'none';
+  /**
+   * The runtime speaks bidirectional stream-json, so it can drive the chat UI
+   * instead of a raw PTY (claude only today). Optional: an older backend omits
+   * it, and a missing value must read as "no chat" so we fall back to the
+   * terminal rather than POSTing to a route that 400s.
+   */
+  readonly chat?: boolean;
 }
 
 export interface AgentInfo {
@@ -207,6 +214,12 @@ export interface SessionRecord {
   readonly startedAt: number | null;
   /** First message (seeded sessions) — the sidebar title; null → fall back to `name`. */
   readonly title: string | null;
+  /**
+   * Which transport drives this session. 'pty' (default) = raw terminal, render
+   * `TerminalView`; 'chat' = structured stream-json, render `ChatView`. Absent
+   * on legacy records → treat as 'pty'.
+   */
+  readonly transport?: 'pty' | 'chat';
 }
 
 export interface SpawnedSession {
@@ -252,6 +265,32 @@ export async function spawnSession(
   if (!res.ok) {
     const msg = await res.text().catch(() => '');
     throw new Error(`spawn session failed: ${res.status} ${msg}`);
+  }
+  return (await res.json()) as SpawnedSession;
+}
+
+/**
+ * Spawn a CHAT-transport session (structured stream-json, rendered as a chat
+ * UI) in a workspace. Parallel to `spawnSession` (PTY). Only claude supports
+ * chat mode today; the backend 400s for other agents.
+ */
+export async function spawnChatSession(
+  id: string,
+  agent?: string,
+): Promise<SpawnedSession> {
+  const body: Record<string, unknown> = {};
+  if (agent !== undefined) body['agent'] = agent;
+  const res = await fetch(
+    `/api/workspaces/${encodeURIComponent(id)}/sessions/chat`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    const msg = await res.text().catch(() => '');
+    throw new Error(`spawn chat session failed: ${res.status} ${msg}`);
   }
   return (await res.json()) as SpawnedSession;
 }

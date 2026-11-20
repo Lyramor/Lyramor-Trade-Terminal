@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   ) {
     console.warn('[guardian] ──────────────────────────────────────────────────────')
     console.warn(`[guardian] Found existing data/ in this checkout (${resolve(process.cwd(), 'data')}).`)
-    console.warn(`[guardian] OpenAlice now stores user data in ${dataHome}/data.`)
+    console.warn(`[guardian] Lyramor now stores user data in ${dataHome}/data.`)
     console.warn(`[guardian] To adopt this checkout's data, stop the stack and run:`)
     console.warn(`[guardian]   mv "$PWD/data" "${dataHome}/data"`)
     console.warn('[guardian] Continuing with a fresh store. (Old behavior: OPENALICE_HOME="$PWD" pnpm dev)')
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   const utaUrl = `http://127.0.0.1:${ports.utaPort}`
 
   const utaInitial = spawnChild(utaSpec)
-  const utaReady = await waitForHttp(`${utaUrl}/__uta/health`, { timeoutMs: 15_000 })
+  const utaReady = await waitForHttp(`${utaUrl}/__uta/health`, { timeoutMs: 90_000 })
   if (!utaReady) {
     console.error(`[guardian] UTA failed to come up within 15s — aborting`)
     try { utaInitial.kill('SIGTERM') } catch { /* noop */ }

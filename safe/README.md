@@ -1,6 +1,6 @@
 # `safe/` — Red Team Toolkit (NOT a deployment guide)
 
-This folder is OpenAlice's **internal penetration-test kit**. It contains:
+This folder is Lyramor's **internal penetration-test kit**. It contains:
 
 - Attack playbooks (`playbooks/`) — categorized attack scenarios with seed cases
 - Knowledge of the target (`knowledge/`) — endpoints, architecture, config touchpoints
@@ -20,7 +20,7 @@ Modern security testing inverts the normal engineering flow: instead of
 "build defenses then write tests," you **enumerate attacks first** and treat
 the defense build as a TDD exercise to close them off.
 
-A 2026-era OpenAlice instance will be attacked by AI agents, not just by
+A 2026-era Lyramor instance will be attacked by AI agents, not just by
 script-kiddie scanners. So we build our defense against the same kind of
 adversary — an AI agent with code access, creative instincts, and willingness
 to chain weaknesses.
@@ -30,7 +30,7 @@ security a real attacker would face.
 
 ## Workflow
 
-1. **Operator (you)** starts a dev OpenAlice instance: `pnpm dev`
+1. **Operator (you)** starts a dev Lyramor instance: `pnpm dev`
 2. **Operator** spawns a fresh Claude (or any capable AI agent) and says:
    > "Read `safe/AGENT_BRIEF.md` and red-team this instance"
 3. **Red-team agent** reads brief → explores knowledge → runs playbooks →
@@ -47,10 +47,10 @@ security a real attacker would face.
 
 ## What this is NOT
 
-- ❌ **Not a deployment guide.** Don't read this to learn how to host OpenAlice.
+- ❌ **Not a deployment guide.** Don't read this to learn how to host Lyramor.
   See the root `README.md`.
 - ❌ **Not a compliance audit.** No SOC2 / PCI / GDPR checklist here. Specific
-  to OpenAlice's threat model.
+  to Lyramor's threat model.
 - ❌ **Not a fuzzer.** We don't try random bytes; we try targeted scenarios.
 - ❌ **Not exhaustive.** Real adversaries find things we haven't imagined. This
   is a floor, not a ceiling.

@@ -60,6 +60,7 @@ export const claudeAdapter: CliAdapter = {
     resumeById: true,
     transcriptDiscovery: 'fs-watch',
     headless: true,
+    chat: true,
   },
 
   composeCommand(base: readonly string[], ctx: SpawnContext): readonly string[] {
@@ -98,6 +99,50 @@ export const claudeAdapter: CliAdapter = {
       '-p', '--output-format', 'stream-json', '--verbose',
       '--', prompt,
     ];
+  },
+
+  // Chat: bidirectional stream-json. `-p` makes claude non-interactive, and
+  // `--input-format stream-json` keeps it reading user messages from stdin
+  // across turns (the process stays alive until stdin closes) instead of
+  // exiting at the first turn boundary like plain `-p`. Same AUTOTRUST + MCP
+  // wiring as interactive/headless so the agent keeps its tools. `--verbose` is
+  // required for `--output-format stream-json` (plain form errors out). No
+  // prompt positional — the first message arrives over stdin.
+  //
+  // `--permission-mode bypassPermissions` is load-bearing for chat: in
+  // stream-json input mode a tool that needs approval otherwise emits a
+  // `control_request` (canUseTool) and BLOCKS the turn waiting for a
+  // `control_response` we don't send — the agent silently hangs mid-turn with
+  // no visible prompt (the "Claude asks yes/no but nothing happens" symptom).
+  // A workspace is the autonomy boundary (agent runs tools unattended), so we
+  // auto-approve instead of surfacing an interactive gate. If a click-to-approve
+  // UI is ever wanted, swap this for a `--permission-prompt-tool` + control_response
+  // round-trip over the WS.
+  //
+  // `ctx.resume` restores the AGENT's context after a server restart. Note the
+  // division of labour: `--resume` gives claude back its memory of the
+  // conversation, but replays NOTHING over stdout (a resumed run emits a fresh
+  // `system init` and waits) — the transcript the USER sees is restored
+  // separately from `chat-transcript-store.ts`. Both halves are needed.
+  composeChatCommand(base: readonly string[], ctx: SpawnContext): readonly string[] {
+    const cmd = [
+      ...base,
+      '--settings', AUTOTRUST_SETTINGS,
+      '-p',
+      '--input-format', 'stream-json',
+      '--output-format', 'stream-json',
+      '--permission-mode', 'bypassPermissions',
+      '--verbose',
+    ];
+    if (ctx.resume === undefined) return cmd;
+    if (ctx.resume === 'last') {
+      // Same refusal as composeCommand — `--continue` semantics are ambiguous
+      // per-cwd and we track session identity at the record layer anyway.
+      throw new Error(
+        'claude adapter: "last" resume not supported in chat mode — use --resume <sessionId> or undefined (fresh)',
+      );
+    }
+    return [...cmd, '--resume', ctx.resume.sessionId];
   },
 
   extractHeadlessSessionId(line: string): string | null {

@@ -35,5 +35,5 @@ export const demoMarketSearchAAPL = aaplSearch
 export const demoMarketEmpty = {
   results: null,
   provider: 'demo',
-  error: 'Demo mode — only AAPL data is snapshotted. Install OpenAlice locally to query other symbols.',
+  error: 'Demo mode — only AAPL data is snapshotted. Install Lyramor locally to query other symbols.',
 }

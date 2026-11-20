@@ -7,6 +7,7 @@ import { FilesPanel } from './FilesPanel';
 import { ResumeCta, prefixOf } from './ResumeCta';
 import { formatRelativeTime } from '../../lib/intl';
 import { TerminalView, type KeyMap } from './Terminal';
+import { ChatView } from './ChatView';
 import { useIsDesktop } from '../../live/use-is-desktop';
 import { useWorkspaceSidePanels } from '../../live/workspace-side-panels';
 
@@ -62,7 +63,12 @@ export function WorkspaceView(props: WorkspaceViewProps): ReactElement {
   //    slot will appear once optimistic / poll lands)
   //  - sessionId + record.state === 'paused' → ResumeCta
   //  - sessionId + record.state === 'running' → active slot among slots
+  // Chat-transport sessions render the ChatView regardless of running/paused —
+  // even an ended chat still holds its transcript server-side (replayed
+  // read-only), so we never route them through the PTY ResumeCta.
+  const isChat = props.activeRecord?.transport === 'chat';
   const showPausedCta =
+    !isChat &&
     props.sessionId !== null &&
     props.activeRecord !== null &&
     props.activeRecord.state === 'paused';
@@ -88,13 +94,22 @@ export function WorkspaceView(props: WorkspaceViewProps): ReactElement {
             onSpawn={props.onSpawnFresh}
           />
         )}
+        {!showEmptyCta && isChat && props.activeRecord && (
+          <div className="workspace-terminal-slot is-active">
+            <ChatView
+              wsId={props.wsId}
+              sessionId={props.activeRecord.id}
+              {...(props.label !== undefined ? { label: `${props.label} · ${props.activeRecord.name}` } : {})}
+            />
+          </div>
+        )}
         {showPausedCta && props.activeRecord && (
           <ResumeCta
             record={props.activeRecord}
             onResume={() => props.onResume(props.activeRecord!.id)}
           />
         )}
-        {!showPausedCta &&
+        {!isChat && !showPausedCta &&
           runningSlots.map((s) => {
             const isActive = s.id === props.sessionId;
             return (

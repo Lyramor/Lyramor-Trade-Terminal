@@ -337,7 +337,7 @@ export const en = {
     emptyBody: "No templates discovered. Check the launcher's templates directory.",
     communityTitle: 'Community',
     communityDescription:
-      'Bundles of third-party ecosystems — cloned fresh from their upstream repos at workspace creation and maintained by their own authors, not by OpenAlice.',
+      'Bundles of third-party ecosystems — cloned fresh from their upstream repos at workspace creation and maintained by their own authors, not by Lyramor.',
     communityBadge: 'Community',
     agentsLabel: 'Agents',
     agentNotInstalled: 'not installed on this machine',
@@ -358,7 +358,7 @@ export const en = {
     create: 'Create workspace',
   },
   auth: {
-    heading: 'Sign in to OpenAlice',
+    heading: 'Sign in to Lyramor',
     instruction: 'Paste the admin token shown on first launch.',
     adminTokenLabel: 'Admin token',
     signingIn: 'Signing in…',

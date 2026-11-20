@@ -1,7 +1,7 @@
 ---
 name: alice-uta
 description: >
-  Trading on your shell PATH via the `alice-uta` CLI — OpenAlice's trading
+  Trading on your shell PATH via the `alice-uta` CLI — Lyramor's trading
   surface. These commands MUTATE real broker state, so resolve the
   broker-native contract first and report every result. Use whenever you need
   to place / modify / cancel an order; close a position; check an account,
@@ -70,7 +70,7 @@ alice-uta position close --help        # close a position (partial or full)
 
 ## The trading-as-git approval flow
 
-The `git` group is OpenAlice's trade-approval flow — a mirror of git verbs on
+The `git` group is Lyramor's trade-approval flow — a mirror of git verbs on
 purpose. Run `--help` per verb:
 
 ```bash

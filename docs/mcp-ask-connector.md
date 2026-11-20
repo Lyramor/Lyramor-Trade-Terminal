@@ -1,15 +1,15 @@
 # MCP Ask Connector
 
-External agents can converse with Alice via a dedicated MCP server, without reducing Alice to a passive tool provider.
+Agent eksternal dapat berkomunikasi dengan Alice melalui MCP server khusus, tanpa mereduksi Alice menjadi sekadar penyedia tool pasif.
 
-## Design Philosophy
+## Filosofi Desain
 
-1. **Alice stays autonomous** — External agents talk *to* Alice, not *through* her. Alice retains her own reasoning, memory, and decision-making. The caller is another conversation partner, not a puppet master.
-2. **Isolated from tool MCP** — The Ask connector runs on a separate port from the main MCP server (which exposes internal tools). This prevents circular calls: Alice's own AI provider never discovers these tools because they are not registered in ToolCenter.
-3. **Caller owns session identity, Alice owns storage** — The caller decides which session to use and when to start a new one. Alice persists conversation history, handles compaction, and maintains context across turns.
-4. **Connector pattern** — The Ask connector is a first-class connector, identical in architecture to Telegram and Web. It registers with the ConnectorRegistry, records interactions via `touchInteraction()`, and participates in delivery routing.
+1. **Alice tetap otonom** — Agent eksternal berbicara *kepada* Alice, bukan *melalui* dirinya. Alice mempertahankan penalaran, memori, dan pengambilan keputusannya sendiri. Pemanggil adalah mitra percakapan lain, bukan dalang yang mengendalikan.
+2. **Terisolasi dari tool MCP** — Connector Ask berjalan pada port terpisah dari MCP server utama (yang mengekspos tool internal). Hal ini mencegah pemanggilan melingkar: AI provider milik Alice tidak pernah menemukan tool ini karena tool tersebut tidak terdaftar di ToolCenter.
+3. **Pemanggil memiliki identitas session, Alice memiliki penyimpanan** — Pemanggil menentukan session mana yang digunakan dan kapan memulai yang baru. Alice menyimpan riwayat percakapan, menangani kompaksi (compaction), dan menjaga konteks antar giliran.
+4. **Pola connector** — Connector Ask adalah connector kelas satu, identik secara arsitektur dengan Telegram dan Web. Ia mendaftar ke ConnectorRegistry, mencatat interaksi melalui `touchInteraction()`, dan ikut serta dalam routing pengiriman.
 
-## Architecture
+## Arsitektur
 
 ```
 External Agent
@@ -34,29 +34,29 @@ External Agent
 └──────────────────────┘
 ```
 
-**Separation from main MCP:**
+**Pemisahan dari MCP utama:**
 
-| Server | Port | Purpose | Registered in ToolCenter? |
+| Server | Port | Tujuan | Terdaftar di ToolCenter? |
 |--------|------|---------|---------------------------|
-| Main MCP (`McpPlugin`) | `mcpPort` | Expose internal tools (trading, analysis, market) | Yes |
-| Ask MCP (`McpAskPlugin`) | `askMcpPort` | Expose conversation ability | No |
+| Main MCP (`McpPlugin`) | `mcpPort` | Mengekspos tool internal (trading, analysis, market) | Ya |
+| Ask MCP (`McpAskPlugin`) | `askMcpPort` | Mengekspos kemampuan percakapan | Tidak |
 
-Because Ask tools are not in ToolCenter, Alice's AI provider (Vercel AI SDK or Claude Code) cannot see them. This structurally prevents circular invocation.
+Karena tool Ask tidak ada di ToolCenter, AI provider milik Alice (Vercel AI SDK atau Claude Code) tidak dapat melihatnya. Ini secara struktural mencegah pemanggilan melingkar.
 
 ## Tools
 
 ### `askWithSession`
 
-Send a message to Alice and receive a response within a persistent session.
+Mengirim pesan ke Alice dan menerima respons dalam session yang persisten.
 
-**Parameters:**
+**Parameter:**
 
-| Name | Type | Required | Description |
+| Nama | Tipe | Wajib | Deskripsi |
 |------|------|----------|-------------|
-| `message` | string | yes | The message to send to Alice |
-| `sessionId` | string | yes | Session identifier, managed by the caller |
+| `message` | string | ya | Pesan yang dikirim ke Alice |
+| `sessionId` | string | ya | Pengenal session, dikelola oleh pemanggil |
 
-**Returns:**
+**Mengembalikan:**
 
 ```json
 {
@@ -65,19 +65,19 @@ Send a message to Alice and receive a response within a persistent session.
 }
 ```
 
-**Behavior:**
-- Creates a new session on first use of a `sessionId`, resumes on subsequent calls
-- Routes through `engine.askWithSession()` — the same pipeline used by Telegram and Web
-- Session history is persisted as JSONL in `data/sessions/mcp-ask__{sessionId}.jsonl`
-- Automatic compaction applies when context grows large
+**Perilaku:**
+- Membuat session baru saat sebuah `sessionId` pertama kali digunakan, melanjutkan pada panggilan berikutnya
+- Mengalirkan melalui `engine.askWithSession()` — pipeline yang sama dengan yang digunakan oleh Telegram dan Web
+- Riwayat session disimpan sebagai JSONL di `data/sessions/mcp-ask__{sessionId}.jsonl`
+- Kompaksi otomatis diterapkan saat konteks membesar
 
 ### `listSessions`
 
-List all sessions created through the Ask connector.
+Menampilkan daftar semua session yang dibuat melalui connector Ask.
 
-**Parameters:** none
+**Parameter:** tidak ada
 
-**Returns:**
+**Mengembalikan:**
 
 ```json
 {
@@ -90,16 +90,16 @@ List all sessions created through the Ask connector.
 
 ### `getSessionHistory`
 
-Read conversation history for a specific session.
+Membaca riwayat percakapan untuk session tertentu.
 
-**Parameters:**
+**Parameter:**
 
-| Name | Type | Required | Description |
+| Nama | Tipe | Wajib | Deskripsi |
 |------|------|----------|-------------|
-| `sessionId` | string | yes | Session identifier |
-| `limit` | number | no | Max messages to return (default: 50) |
+| `sessionId` | string | ya | Pengenal session |
+| `limit` | number | tidak | Jumlah maksimum pesan yang dikembalikan (default: 50) |
 
-**Returns:**
+**Mengembalikan:**
 
 ```json
 {
@@ -110,9 +110,9 @@ Read conversation history for a specific session.
 }
 ```
 
-## Configuration
+## Konfigurasi
 
-Enable and set the port in `data/config/connectors.json`:
+Aktifkan dan tetapkan port di `data/config/connectors.json`:
 
 ```json
 {
@@ -123,18 +123,18 @@ Enable and set the port in `data/config/connectors.json`:
 }
 ```
 
-When `enabled` is `false` or `port` is omitted, the Ask connector is not started. You can also toggle it via the Web UI under **Connectors**.
+Saat `enabled` bernilai `false` atau `port` dihilangkan, connector Ask tidak dijalankan. Anda juga dapat mengaktifkannya melalui Web UI di bawah menu **Connectors**.
 
-## Session Management
+## Manajemen Session
 
-Sessions are caller-managed (identity) and Alice-managed (storage):
+Session dikelola oleh pemanggil (identitas) dan dikelola oleh Alice (penyimpanan):
 
-- **Caller provides `sessionId`** — Can be any string. Use meaningful names (e.g. `"daily-review"`, `"risk-check"`) or generated UUIDs.
-- **Alice persists on disk** — Each session is a JSONL file at `data/sessions/mcp-ask__{sessionId}.jsonl`, following the same format as Telegram and Web sessions.
-- **Compaction applies** — Long sessions are automatically compacted (summarized) to stay within context limits.
-- **No expiration** — Sessions persist indefinitely. The caller decides when to start fresh by using a new `sessionId`.
+- **Pemanggil menyediakan `sessionId`** — Bisa berupa string apa pun. Gunakan nama yang bermakna (mis. `"daily-review"`, `"risk-check"`) atau UUID yang dibangkitkan.
+- **Alice menyimpan ke disk** — Setiap session adalah file JSONL di `data/sessions/mcp-ask__{sessionId}.jsonl`, mengikuti format yang sama dengan session Telegram dan Web.
+- **Kompaksi diterapkan** — Session yang panjang secara otomatis dipadatkan (diringkas) agar tetap berada dalam batas konteks.
+- **Tanpa kedaluwarsa** — Session bertahan tanpa batas waktu. Pemanggil yang menentukan kapan memulai dari awal dengan menggunakan `sessionId` baru.
 
-## File Inventory
+## Inventaris File
 
 ```
 src/
@@ -147,9 +147,9 @@ data/
     mcp-ask__*.jsonl        # Per-session conversation history
 ```
 
-## Example: External Agent Integration
+## Contoh: Integrasi Agent Eksternal
 
-An orchestration agent can use the Ask connector to delegate trading decisions to Alice:
+Agent orkestrasi dapat menggunakan connector Ask untuk mendelegasikan keputusan trading kepada Alice:
 
 ```
 User → Orchestrator: "Should I buy more ETH?"
@@ -162,4 +162,4 @@ User → Orchestrator: "Should I buy more ETH?"
 Orchestrator → User: "Alice suggests waiting for $3,050 support before adding. RSI is at 42 with declining volume."
 ```
 
-Alice processes the question using her full toolkit (market data, indicators, position context, memory) and responds as an autonomous agent — not as a function returning a value.
+Alice memproses pertanyaan menggunakan seluruh perangkat toolnya (market data, indikator, konteks posisi, memori) dan merespons sebagai agent otonom — bukan sebagai fungsi yang mengembalikan nilai.

@@ -46,7 +46,7 @@ export async function relocateLegacyData(legacyRoot: string, newRoot: string): P
 
   await writeFile(
     join(legacyRoot, 'DATA-MOVED.txt'),
-    `OpenAlice user data moved to ${newData} on ${new Date().toISOString()}\n`,
+    `Lyramor user data moved to ${newData} on ${new Date().toISOString()}\n`,
   )
   return 'moved'
 }

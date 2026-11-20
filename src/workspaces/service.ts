@@ -60,6 +60,9 @@ export class HeadlessCapacityError extends Error {
 }
 import { ScrollbackStore } from './scrollback-store.js';
 import { SessionPool, type SessionFactoryContext } from './session-pool.js';
+import { ChatSessionManager, type ChatSession } from './chat-session.js';
+import { ChatTranscriptStore } from './chat-transcript-store.js';
+import type { ChatEvent } from './chat-protocol.js';
 import { SessionRegistry, type SessionRecord } from './session-registry.js';
 import { buildSpawnEnv } from './spawn-env.js';
 import { readReadmeVersion, TemplateRegistry } from './template-registry.js';
@@ -96,6 +99,26 @@ export interface WorkspaceService {
   readonly creator: WorkspaceCreator;
   readonly pool: SessionPool;
   readonly transcriptWatcher: TranscriptWatcher;
+  /** The chat-transport plane (stream-json chat sessions; powers the chat WS). */
+  readonly chat: ChatSessionManager;
+  /**
+   * Spawn a CHAT-transport session in a workspace (bidirectional stream-json,
+   * rendered as a chat UI). The SessionRegistry record is pre-allocated by the
+   * caller with `transport: 'chat'`. Reuses the same env/cwd/MCP wiring as the
+   * PTY path. Throws if the adapter has no chat mode.
+   */
+  spawnChatSession(wsId: string, adapter: CliAdapter, recordId: string): ChatSession;
+  /**
+   * Resolve a chat session for a record, rehydrating it from disk when the live
+   * one is gone (server restart, or a session paused long ago). Returns the live
+   * session if one exists; otherwise replays the persisted transcript into a
+   * DEFERRED session — the transcript is visible immediately and the agent
+   * process only spawns (with `--resume`) once the user actually sends
+   * something. Returns null when the record is unknown or isn't a chat record.
+   */
+  ensureChatSession(recordId: string): Promise<ChatSession | null>;
+  /** Drop a chat record's persisted transcript (session / workspace delete). */
+  removeChatTranscript(recordId: string): Promise<void>;
   resolveAdapter(meta: WorkspaceMeta, agentId?: string): CliAdapter;
   publicMeta(w: WorkspaceMeta): Promise<unknown>;
   /**
@@ -328,6 +351,12 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     // adapter.composeEnv() lets an MCP-config adapter (opencode) read it and emit
     // the matching out-of-band header.
     extraEnv?: Record<string, string>,
+    // When true, compose the bidirectional stream-json CHAT argv
+    // (`adapter.composeChatCommand`) instead of the interactive TUI. Env / cwd /
+    // MCP / credential wiring is identical — only the command differs — so the
+    // chat transport reuses this single source of truth. The `initialPrompt`
+    // seed is ignored in chat mode (the first message arrives over stdin).
+    chatMode = false,
   ): {
     command: readonly string[];
     cwd: string;
@@ -376,6 +405,18 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     // adapter's composeEnv ignores initialPrompt.)
     const adapterEnv = adapter.composeEnv?.(baseCtx) ?? {};
     const env = { ...baseEnv, ...adapterEnv };
+
+    // Chat transport: swap only the command for the bidirectional stream-json
+    // argv; env/cwd/transcriptDir stay identical to the PTY path. No seed
+    // handling (the first message arrives over stdin, not as a positional).
+    if (chatMode) {
+      const chatCommand = adapter.composeChatCommand?.(config.command, baseCtx);
+      if (!chatCommand) {
+        throw new Error(`adapter ${adapter.id} does not support chat mode`);
+      }
+      const transcriptDir = adapter.transcriptDir ? adapter.transcriptDir(ws.dir) : null;
+      return { command: chatCommand, cwd: ws.dir, env, transcriptDir };
+    }
 
     // Quick-chat seed — the caller (the pool factory) passes `initialPrompt` ONLY
     // on a genuinely fresh spawn, so we don't re-gate on `resume` (pi rewrites a
@@ -805,6 +846,125 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     transcriptWatcher,
   );
 
+  // Chat-transport plane — parallel to the PTY `pool`, for stream-json chat
+  // sessions. Durable: `chatTranscripts` mirrors every event to disk, so a
+  // restart restores the conversation (see `ensureChatSession`) rather than
+  // dropping it the way an un-resumed PTY does.
+  const chat = new ChatSessionManager(launcherLogger.child({ scope: 'chat' }));
+  const chatTranscripts = new ChatTranscriptStore(
+    join(config.launcherRoot, 'state'),
+    launcherLogger.child({ scope: 'chat-transcript' }),
+  );
+
+  /**
+   * Spawn a CHAT-transport session in a workspace: composes the bidirectional
+   * stream-json argv (reusing `composeSpawnInputs`' env/cwd/MCP/credential
+   * wiring) and starts a `ChatSession`. The SessionRegistry record is
+   * pre-allocated by the caller (the route), mirroring `pool.spawn`. Returns the
+   * live session handle.
+   */
+  const startChatSession = (
+    wsId: string,
+    adapter: CliAdapter,
+    recordId: string,
+    opts: {
+      /** Agent-side session id to `--resume` (rehydration after a restart). */
+      readonly resume?: string;
+      /** Prior events to replay into the new session's in-memory transcript. */
+      readonly initialTranscript?: readonly ChatEvent[];
+      /** Hold off spawning the agent until the user's first message. */
+      readonly deferStart?: boolean;
+    } = {},
+  ): ChatSession => {
+    const ws = registry.get(wsId);
+    if (!ws) throw new Error(`workspace not found: ${wsId}`);
+    const { command, env } = composeSpawnInputs(
+      ws,
+      adapter,
+      opts.resume !== undefined ? { sessionId: opts.resume } : undefined,
+      undefined,
+      // Same identity seam as the PTY pool factory — the `alice` shim forwards
+      // it as `x-openalice-session`, resolved server-side against the registry.
+      { AQ_SESSION_ID: recordId },
+      true, // chatMode
+    );
+    launcherLogger.event('path.trace', {
+      where: 'chat.spawn',
+      wsId,
+      recordId,
+      agent: adapter.id,
+      wsDir: ws.dir,
+      composedCommand: command,
+      ...(opts.resume ? { resume: opts.resume } : {}),
+      ...(opts.deferStart ? { deferred: true } : {}),
+    });
+    return chat.create({
+      recordId,
+      wsId,
+      command,
+      cwd: ws.dir,
+      env,
+      logger: launcherLogger.child({ scope: 'chat-session', wsId, agent: adapter.id }),
+      transcriptStore: chatTranscripts,
+      ...(opts.initialTranscript ? { initialTranscript: opts.initialTranscript } : {}),
+      ...(opts.deferStart ? { deferStart: true } : {}),
+      ...(adapter.extractHeadlessSessionId
+        ? { extractSessionId: adapter.extractHeadlessSessionId.bind(adapter) }
+        : {}),
+      // Persist the agent's own session id — without it a restart could restore
+      // the visible transcript but not the agent's memory of it.
+      onAgentSessionId: (id, agentSessionId) => {
+        void sessionRegistry
+          .update(wsId, id, { resumeHint: { kind: 'agent-session-id', value: agentSessionId } })
+          .catch(() => undefined);
+      },
+      onExit: (id) => {
+        // Flip the record to paused so the sidebar stops showing a live dot.
+        void sessionRegistry
+          .update(wsId, id, { state: 'paused', lastActiveAt: new Date().toISOString() })
+          .catch(() => undefined);
+      },
+    });
+  };
+
+  const spawnChatSession = (wsId: string, adapter: CliAdapter, recordId: string): ChatSession =>
+    startChatSession(wsId, adapter, recordId);
+
+  const ensureChatSession = async (recordId: string): Promise<ChatSession | null> => {
+    const live = chat.get(recordId);
+    if (live) return live;
+    const record = sessionRegistry.findById(recordId);
+    if (!record || record.transport !== 'chat') return null;
+    const adapter = adapters.get(record.agent);
+    if (!adapter?.capabilities.chat || !adapter.composeChatCommand) {
+      launcherLogger.warn('chat.rehydrate_unsupported_agent', { recordId, agent: record.agent });
+      return null;
+    }
+    const initialTranscript = await chatTranscripts.read(recordId);
+    try {
+      const session = startChatSession(record.wsId, adapter, recordId, {
+        ...(record.resumeHint?.value ? { resume: record.resumeHint.value } : {}),
+        initialTranscript,
+        // The user opening a tab is not a reason to pay for an agent process —
+        // they get the transcript now, and the process spawns if they reply.
+        deferStart: true,
+      });
+      launcherLogger.info('chat.rehydrated', {
+        recordId,
+        wsId: record.wsId,
+        events: initialTranscript.length,
+        resume: record.resumeHint?.value ?? null,
+      });
+      return session;
+    } catch (err) {
+      launcherLogger.error('chat.rehydrate_failed', { recordId, err });
+      return null;
+    }
+  };
+
+  const removeChatTranscript = (recordId: string): Promise<void> =>
+    chatTranscripts.remove(recordId);
+
   const detectAgents = (): Record<string, AgentAvailability> => {
     const out: Record<string, AgentAvailability> = {};
     for (const a of adapters.list()) {
@@ -822,6 +982,10 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     const liveById = new Map(live.map((l) => [l.id, l]));
     const sessions = sessionRegistry.listFor(w.id).map((r) => {
       const liveEntry = liveById.get(r.id);
+      // Chat-transport sessions live in the `chat` manager, not the PTY `pool`,
+      // so their liveness is resolved separately.
+      const chatLive = r.transport === 'chat' ? chat.get(r.id) : undefined;
+      const isLive = r.transport === 'chat' ? !!chatLive?.alive : !!liveEntry;
       return {
         id: r.id,
         wsId: r.wsId,
@@ -829,11 +993,12 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
         name: r.name,
         createdAt: r.createdAt,
         lastActiveAt: r.lastActiveAt,
-        state: r.state === 'running' && liveEntry ? 'running' : 'paused',
-        agentSessionId: liveEntry?.agentSessionId ?? r.resumeHint?.value ?? null,
-        pid: liveEntry?.pid ?? null,
-        startedAt: liveEntry?.startedAt ?? null,
+        state: r.state === 'running' && isLive ? 'running' : 'paused',
+        agentSessionId: liveEntry?.agentSessionId ?? chatLive?.agentSessionId ?? r.resumeHint?.value ?? null,
+        pid: liveEntry?.pid ?? chatLive?.pid ?? null,
+        startedAt: liveEntry?.startedAt ?? chatLive?.startedAt ?? null,
         title: r.title ?? null,
+        transport: r.transport ?? 'pty',
       };
     });
     // Workspace AI provider override signals — read by the Overview
@@ -884,6 +1049,7 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     launcherLogger.info('workspaces.dispose', { reason, activeSessions: pool.size() });
     scheduleScanner.stop();
     pool.disposeAll('plugin shutdown');
+    chat.disposeAll('plugin shutdown');
     transcriptWatcher.disposeAll();
   };
 
@@ -897,6 +1063,10 @@ export async function createWorkspaceService(opts: CreateWorkspaceServiceOptions
     creator,
     pool,
     transcriptWatcher,
+    chat,
+    spawnChatSession,
+    ensureChatSession,
+    removeChatTranscript,
     resolveAdapter,
     publicMeta,
     detectAgents,

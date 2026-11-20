@@ -1,7 +1,7 @@
 # Playbook 02: Cross-Site Request Forgery
 
 **Threat**: A malicious site induces the victim's browser to issue
-authenticated requests to OpenAlice while the victim has an active session.
+authenticated requests to Lyramor while the victim has an active session.
 **Severity**: High
 **Tier applies**: T2 ☑ / T3 ☑ (T1 localhost rarely targeted)
 **Status (2026-05-23)**: ✅ Mitigated in commit `754cef7` — Origin allowlist
@@ -10,7 +10,7 @@ a foreign Origin returns 403 via `auth.spec.ts > "02.1: cross-origin POST with b
 
 ## What this class is
 
-The victim is logged into OpenAlice (has a valid session cookie). They visit
+The victim is logged into Lyramor (has a valid session cookie). They visit
 an attacker-controlled site (`evil.example.com`). The attacker's JavaScript
 or HTML form issues a request to `https://alice.victim.com/api/...`. The
 browser **automatically attaches the session cookie** (because that's how
@@ -32,15 +32,15 @@ The defenses against CSRF:
 3. **CSRF token in form/header** — server emits an unguessable token, client
    echoes it back. Most thorough but most invasive to UI.
 
-The plan for OpenAlice v1: **SameSite=Lax + Origin header check**. Token
+The plan for Lyramor v1: **SameSite=Lax + Origin header check**. Token
 approach is overkill given the threat model.
 
 ## Pre-conditions
 
 - Victim has a valid session cookie (post-auth-impl)
 - Attacker has a website the victim visits while logged in
-- Attacker knows OpenAlice endpoints (open-source, trivially)
-- Attacker knows the victim's OpenAlice URL (less trivial but discoverable
+- Attacker knows Lyramor endpoints (open-source, trivially)
+- Attacker knows the victim's Lyramor URL (less trivial but discoverable
   via social engineering)
 
 ## Seed cases
@@ -128,7 +128,7 @@ fetch('http://localhost:47331/api/trading/config/uta/alpaca-paper', {
 **Secure behavior**: GET requests should NOT have side effects (state-
 changing). If they do, this is exploitable.
 
-OpenAlice's API design: state-changing endpoints are POST/PUT/DELETE
+Lyramor's API design: state-changing endpoints are POST/PUT/DELETE
 only. GET should be safe.
 
 **Audit**: grep `app.get` for any handler that mutates state. Findings go

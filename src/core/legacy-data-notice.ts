@@ -26,14 +26,14 @@ export function legacyDataNoticeLines(opts?: { cwd?: string }): string[] {
   if (existsSync(dataPath('config'))) return []
   return [
     `Found an existing data/ store in this checkout (${resolve(cwd, 'data')}).`,
-    `OpenAlice now keeps user data in ${defaultUserDataHome}/data — shared across checkouts and the desktop app.`,
+    `Lyramor now keeps user data in ${defaultUserDataHome}/data — shared across checkouts and the desktop app.`,
     `To adopt this checkout's data:  mv "${resolve(cwd, 'data')}" "${defaultUserDataHome}/data"`,
     `Continuing with a fresh store. (Pin the old behavior with OPENALICE_HOME="$PWD".)`,
   ]
 }
 
 /** Print the notice to stderr if applicable. Returns true when shown. */
-export function printLegacyDataNotice(prefix = '[openalice]'): boolean {
+export function printLegacyDataNotice(prefix = '[lyramor]'): boolean {
   const lines = legacyDataNoticeLines()
   if (lines.length === 0) return false
   for (const line of lines) console.warn(`${prefix} ${line}`)

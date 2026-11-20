@@ -47,6 +47,7 @@ export function createWorkspaceServiceRef(): WorkspaceServiceRef {
 import { createWorkspaceRoutes } from './routes/workspaces.js'
 import { createHeadlessRoutes } from './routes/headless.js'
 import { attachWorkspacesWS, type AttachedWS } from './workspaces-ws.js'
+import { attachWorkspacesChatWS, type AttachedChatWS } from './workspaces-chat-ws.js'
 import type { Server as HttpServer } from 'node:http'
 
 export interface WebConfig {
@@ -66,6 +67,7 @@ export class WebPlugin implements Plugin {
   private ingestProducer?: ProducerHandle<readonly ['agent.work.requested']>
   private workspaceService: WorkspaceService | null = null
   private workspacesWs: AttachedWS | null = null
+  private workspacesChatWs: AttachedChatWS | null = null
 
   constructor(
     private config: WebConfig,
@@ -272,6 +274,7 @@ export class WebPlugin implements Plugin {
     // Attach WS upgrade handler for /api/workspaces/pty onto the same http.Server.
     if (this.workspaceService) {
       this.workspacesWs = attachWorkspacesWS(this.server as HttpServer, this.workspaceService)
+      this.workspacesChatWs = attachWorkspacesChatWS(this.server as HttpServer, this.workspaceService)
     }
   }
 
@@ -281,6 +284,8 @@ export class WebPlugin implements Plugin {
     this.ingestProducer = undefined
     this.workspacesWs?.dispose()
     this.workspacesWs = null
+    this.workspacesChatWs?.dispose()
+    this.workspacesChatWs = null
     if (this.workspaceService) {
       await this.workspaceService.dispose('plugin stop')
       this.workspaceService = null

@@ -8,7 +8,7 @@ export function DemoBanner(): ReactElement {
         Demo
       </span>
       <span className="flex-1 min-w-0 truncate text-text-muted">
-        You&apos;re looking at a snapshot of OpenAlice with recorded data. Mutations don&apos;t persist; the agent terminal is replayed.
+        You&apos;re looking at a snapshot of Lyramor with recorded data. Mutations don&apos;t persist; the agent terminal is replayed.
       </span>
       <a
         href="https://github.com/TraderAlice/OpenAlice"

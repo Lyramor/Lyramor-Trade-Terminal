@@ -1,6 +1,6 @@
 # Config Files & Filesystem State
 
-Everything OpenAlice persists is in JSON files under `data/`. Attacking
+Everything Lyramor persists is in JSON files under `data/`. Attacking
 involves understanding what's in them and what can be read/written/leaked.
 
 ## Critical paths (when auth lands)
@@ -101,7 +101,7 @@ The base data directory is resolved by `src/core/paths.ts`:
 - Override: `OPENALICE_HOME` env (Docker sets `/data`;
   `OPENALICE_HOME="$PWD"` pins a checkout-local store)
 
-An attacker who can convince OpenAlice to read or write a path **outside**
+An attacker who can convince Lyramor to read or write a path **outside**
 its data root would have a serious primitive. The relevant functions to
 audit:
 

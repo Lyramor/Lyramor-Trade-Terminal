@@ -1,6 +1,6 @@
 # Chat workspace
 
-OpenAlice's tools are on your shell PATH as four CLIs — that's how you reach the
+Lyramor's tools are on your shell PATH as four CLIs — that's how you reach the
 trading engine, market data, research surfaces, and the user's inbox. They're
 already there, no setup. Each has a skill with the full manual; this is the map.
 Discover any command live with `<cli> --help` and `<cli> <group> <verb> --help`

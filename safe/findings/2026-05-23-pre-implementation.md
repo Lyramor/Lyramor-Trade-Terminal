@@ -11,7 +11,7 @@ tables.
 
 ## Summary
 
-OpenAlice as of 2026-05-23 ships with **zero authentication at the Alice
+Lyramor as of 2026-05-23 ships with **zero authentication at the Alice
 process boundary**. Any HTTP request that reaches Alice's bound interface
 is processed as if it came from the legitimate user. There is no:
 

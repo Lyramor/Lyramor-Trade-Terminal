@@ -40,6 +40,14 @@ export interface SessionRecord {
    * Stored capped — we don't need the whole prompt for a one-line title.
    */
   readonly title?: string;
+  /**
+   * Which transport drives this session's agent process. 'pty' (default when
+   * absent, for back-compat with existing records) = raw-byte terminal via
+   * `PersistentSession`; 'chat' = structured stream-json via `ChatSession`,
+   * rendered as a chat UI. Determines which WS endpoint and frontend view the
+   * record binds to.
+   */
+  readonly transport?: 'pty' | 'chat';
 }
 
 interface FileShape {
@@ -296,6 +304,14 @@ function validateFile(value: unknown): SessionRecord[] {
       // it's written to disk by `flush`, so it must be read back here too, or
       // every server restart / registry reload reverts the row to the `c1` name.
       ...(typeof r['title'] === 'string' ? { title: r['title'] } : {}),
+      // Same hazard as `title`: `flush` writes `transport`, so it must be read
+      // back or every restart silently downgrades a chat record to the `'pty'`
+      // default and the session re-opens as a raw terminal instead of the chat
+      // view. Unknown values fall through to the default rather than throwing —
+      // a record written by a newer build shouldn't brick the whole file.
+      ...(r['transport'] === 'chat' || r['transport'] === 'pty'
+        ? { transport: r['transport'] }
+        : {}),
     };
     const hint = r['resumeHint'];
     if (

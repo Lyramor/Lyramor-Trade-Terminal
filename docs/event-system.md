@@ -1,39 +1,39 @@
-# Event System Guide
+# Panduan Event System
 
-Alice's async lifecycle runs on a typed pub-sub bus. Cron timers, connector
-gateways, and external webhooks emit events; Listeners react to them and may
-emit downstream events. **Read this before adding a new event type, Listener,
-or Producer** — the system has a small amount of structure that's easy to
-miss, and skipping steps silently works in dev but breaks in subtle ways
-(missing validation, invisible in the Flow graph, forgery via webhook, etc.).
+Siklus hidup asinkron Alice berjalan di atas bus pub-sub yang divalidasi schema. Timer cron, gateway
+connector, dan webhook eksternal melakukan emit Event; Listener bereaksi terhadapnya dan boleh
+melakukan emit Event turunan. **Baca ini sebelum menambahkan tipe Event baru, Listener,
+atau Producer** — sistem ini punya sedikit struktur yang mudah terlewat, dan melewatkan langkah
+secara diam-diam tetap jalan di dev tapi rusak dengan cara yang halus (validasi hilang, tak
+terlihat di graph Flow, pemalsuan lewat webhook, dll.).
 
-If the Flow tab on `/automation` is live, it's the best visual reference for
-what's already there.
+Kalau tab Flow di `/automation` sedang aktif, itu referensi visual terbaik untuk
+apa yang sudah ada.
 
-## The three primitives
+## Tiga primitif
 
-**Event type** — a named, schema-validated payload shape. Declared in one
-place: [AgentEvents](../src/core/agent-event.ts) (metadata + TypeBox schema +
-optional `external: true`). Derived `AgentEventMap` gives you full TS
-discriminated-union narrowing anywhere you hold an `EventLogEntry`.
+**Event type** — sebuah bentuk payload bernama yang divalidasi oleh schema. Dideklarasikan di satu
+tempat: [AgentEvents](../src/core/agent-event.ts) (metadata + schema TypeBox +
+opsional `external: true`). Turunannya, `AgentEventMap`, memberimu penyempitan tipe penuh berbasis
+discriminated-union TS di mana pun kamu memegang `EventLogEntry`.
 
-**Listener** — reactive. Subscribes to one or more event types (or `'*'` for
-all), runs a handler, optionally emits follow-up events. Owns its own
-lifecycle; registers with the [ListenerRegistry](../src/core/listener-registry.ts).
-Canonical example: [cron-router](../src/task/cron/listener.ts).
+**Listener** — reaktif. Berlangganan ke satu atau lebih tipe Event (atau `'*'` untuk
+semua), menjalankan handler, dan opsional melakukan emit Event lanjutan. Mengelola siklus hidupnya
+sendiri; mendaftar ke [ListenerRegistry](../src/core/listener-registry.ts).
+Contoh kanonis: [cron-router](../src/task/cron/listener.ts).
 
-**Producer (Pumper)** — pure event source. Only emits, never subscribes.
-Declared against the same registry. Canonical examples: [cron-engine](../src/task/cron/engine.ts)
+**Producer (Pumper)** — sumber Event murni. Hanya melakukan emit, tidak pernah berlangganan.
+Dideklarasikan terhadap registry yang sama. Contoh kanonis: [cron-engine](../src/task/cron/engine.ts)
 (timer), [webhook-ingest](../src/connectors/web/web-plugin.ts) (HTTP),
-[connectors](../src/core/connector-center.ts) (shared across every connector
-plugin — Web chat, Telegram, future Discord/Slack/etc., all emit
-`message.received` / `message.sent` through ConnectorCenter's single
-`connectors` producer rather than declaring their own).
+[connectors](../src/core/connector-center.ts) (dipakai bersama oleh setiap connector
+plugin — Web chat, Telegram, Discord/Slack/dll. di masa depan, semuanya melakukan emit
+`message.received` / `message.sent` lewat satu Producer `connectors` milik ConnectorCenter
+alih-alih mendeklarasikan miliknya sendiri).
 
-Listeners and Producers **share one name namespace** — a name cannot be both.
-The registry enforces this at declare time.
+Listener dan Producer **berbagi satu namespace nama** — sebuah nama tidak bisa menjadi keduanya.
+Registry menegakkan ini saat deklarasi.
 
-## Mental model
+## Model mental
 
 ```
             ┌─────────────┐
@@ -44,52 +44,52 @@ The registry enforces this at declare time.
             └─────────────┘
 ```
 
-- The EventLog is the bus — append-only JSONL, fanned out to subscribers.
-- Every event has a monotonic `seq` + `ts`.
-- Listener `ctx.emit` auto-fills `causedBy = parentEntry.seq` — you get a
-  causal chain for free. Producers have no parent, so their emits have no
-  `causedBy` unless the caller passes one explicitly.
-- Wildcards (`subscribes: '*'` / `emits: '*'`) render as a directional halo
-  in the Flow view instead of N concrete edges. Runtime schema validation
-  still applies.
-- The Flow view at `/automation` hides an event node on a side where it has
-  no concrete edge — a pure input event only shows on the left, a terminal
-  output only on the right. Wildcards count as auras, not concrete edges,
-  for this decision.
+- EventLog adalah bus-nya — JSONL append-only, disebar (fan-out) ke para subscriber.
+- Setiap Event punya `seq` + `ts` yang monoton.
+- `ctx.emit` milik Listener mengisi otomatis `causedBy = parentEntry.seq` — kamu dapat
+  rantai kausal secara gratis. Producer tidak punya parent, jadi emit-nya tidak punya
+  `causedBy` kecuali pemanggil memberikannya secara eksplisit.
+- Wildcard (`subscribes: '*'` / `emits: '*'`) dirender sebagai halo berarah
+  di tampilan Flow alih-alih N edge konkret. Validasi schema saat runtime
+  tetap berlaku.
+- Tampilan Flow di `/automation` menyembunyikan node Event pada sisi di mana ia tidak punya
+  edge konkret — Event input murni hanya muncul di kiri, output terminal
+  hanya di kanan. Wildcard dihitung sebagai aura, bukan edge konkret,
+  untuk keputusan ini.
 
-## Reference files (keep open when working on this area)
+## Berkas referensi (tetap buka saat bekerja di area ini)
 
-| Concern | File |
+| Perihal | Berkas |
 |---|---|
-| Event metadata + schemas | [src/core/agent-event.ts](../src/core/agent-event.ts) |
-| Listener grammar (EventTypeSet, EmitSignature, ListenerContext) | [src/core/listener.ts](../src/core/listener.ts) |
-| Producer types | [src/core/producer.ts](../src/core/producer.ts) |
+| Metadata + schema Event | [src/core/agent-event.ts](../src/core/agent-event.ts) |
+| Grammar Listener (EventTypeSet, EmitSignature, ListenerContext) | [src/core/listener.ts](../src/core/listener.ts) |
+| Tipe Producer | [src/core/producer.ts](../src/core/producer.ts) |
 | Registry (register / declareProducer / start / stop) | [src/core/listener-registry.ts](../src/core/listener-registry.ts) |
-| EventLog itself | [src/core/event-log.ts](../src/core/event-log.ts) |
-| Reference Listener (subscribe → agent → emit done/error) | [src/task/task-router/listener.ts](../src/task/task-router/listener.ts) |
-| Reference Producer (timer) | [src/task/cron/engine.ts](../src/task/cron/engine.ts) |
-| Webhook ingest gate | [src/connectors/web/routes/events.ts](../src/connectors/web/routes/events.ts) + [webhook-auth.ts](../src/connectors/web/routes/webhook-auth.ts) |
-| Flow visualization | [ui/src/pages/AutomationFlowSection.tsx](../ui/src/pages/AutomationFlowSection.tsx) |
-| Webhook docs UI | [ui/src/pages/AutomationWebhookSection.tsx](../ui/src/pages/AutomationWebhookSection.tsx) |
+| EventLog itu sendiri | [src/core/event-log.ts](../src/core/event-log.ts) |
+| Listener referensi (subscribe → agent → emit done/error) | [src/task/task-router/listener.ts](../src/task/task-router/listener.ts) |
+| Producer referensi (timer) | [src/task/cron/engine.ts](../src/task/cron/engine.ts) |
+| Gerbang webhook ingest | [src/connectors/web/routes/events.ts](../src/connectors/web/routes/events.ts) + [webhook-auth.ts](../src/connectors/web/routes/webhook-auth.ts) |
+| Visualisasi Flow | [ui/src/pages/AutomationFlowSection.tsx](../ui/src/pages/AutomationFlowSection.tsx) |
+| UI dokumentasi webhook | [ui/src/pages/AutomationWebhookSection.tsx](../ui/src/pages/AutomationWebhookSection.tsx) |
 
-## Recipe: add a new event type
+## Resep: menambah tipe Event baru
 
-1. **Payload interface** — add to [agent-event.ts](../src/core/agent-event.ts)
-   (top section).
-2. **AgentEventMap** — add the `'name': YourPayload` line.
-3. **TypeBox schema** — add a `YourSchema = Type.Object({ ... })`.
-4. **AgentEvents metadata** — add the entry with `schema`, optional
-   `external: true`, and a one-line `description` (surfaces in the Flow tab
-   tooltip and in `/api/topology`).
-5. **Tests** — add to `expectedTypes` in [agent-event.spec.ts](../src/core/agent-event.spec.ts)
-   and add at least one positive `validateEventPayload` case.
+1. **Interface payload** — tambahkan ke [agent-event.ts](../src/core/agent-event.ts)
+   (bagian atas).
+2. **AgentEventMap** — tambahkan baris `'name': YourPayload`.
+3. **Schema TypeBox** — tambahkan `YourSchema = Type.Object({ ... })`.
+4. **Metadata AgentEvents** — tambahkan entry dengan `schema`, opsional
+   `external: true`, dan satu baris `description` (muncul di tooltip tab Flow
+   dan di `/api/topology`).
+5. **Tes** — tambahkan ke `expectedTypes` di [agent-event.spec.ts](../src/core/agent-event.spec.ts)
+   dan tambahkan setidaknya satu kasus positif `validateEventPayload`.
 
-Nothing else is required for a purely internal event — it's now a valid
-target for any Listener's `subscribes` or `ctx.emit`.
+Tidak ada hal lain yang diperlukan untuk Event yang murni internal — ia kini menjadi target valid
+untuk `subscribes` atau `ctx.emit` Listener mana pun.
 
-## Recipe: add a new Listener
+## Resep: menambah Listener baru
 
-Copy the task-router pattern ([task-router/listener.ts](../src/task/task-router/listener.ts)):
+Salin pola task-router ([task-router/listener.ts](../src/task/task-router/listener.ts)):
 
 ```ts
 const MY_EMITS = ['my.done', 'my.error'] as const  // `as const` is load-bearing — TS needs the literal tuple
@@ -120,31 +120,31 @@ export function createMyListener(opts: {
 }
 ```
 
-Wire in [main.ts](../src/main.ts): `const x = createMyListener({ registry: listenerRegistry, ... }); await x.start();`
-**Registration order matters** — call `x.start()` **before** `listenerRegistry.start()`,
-or register lazily after (the registry handles both, but the idiom is
-register-then-start).
+Sambungkan di [main.ts](../src/main.ts): `const x = createMyListener({ registry: listenerRegistry, ... }); await x.start();`
+**Urutan registrasi penting** — panggil `x.start()` **sebelum** `listenerRegistry.start()`,
+atau daftarkan secara lazy setelahnya (registry menangani keduanya, tapi idiomnya adalah
+register-lalu-start).
 
-Write a spec file mirroring [task-router/listener.spec.ts](../src/task/task-router/listener.spec.ts):
-real `EventLog` + `ListenerRegistry`, mocked agentCenter / connectorCenter,
-append the subscribed event and assert downstream events appeared.
+Tulis berkas spec yang mencerminkan [task-router/listener.spec.ts](../src/task/task-router/listener.spec.ts):
+`EventLog` + `ListenerRegistry` asli, agentCenter / connectorCenter di-mock,
+append Event yang dilanggan lalu pastikan Event turunan muncul.
 
-### Subscribe / emit grammar cheatsheet
+### Contekan grammar subscribe / emit
 
-| Form | Meaning | Flow rendering |
+| Bentuk | Arti | Render di Flow |
 |---|---|---|
-| `subscribes: 'cron.fire'` | Single type | Concrete edge from left-column node |
-| `subscribes: ['cron.fire', 'task.requested'] as const` | Enumerated tuple | N concrete edges |
-| `subscribes: '*'` | All events | Left-side aura (no edges) |
-| `emits` omitted | Emits nothing (ctx.emit is unusable) | No right-side edges |
-| `emits: ['my.done', 'my.error'] as const` | Enumerated tuple | N concrete edges |
-| `emits: '*'` | Any registered type | Right-side aura |
+| `subscribes: 'cron.fire'` | Tipe tunggal | Edge konkret dari node kolom kiri |
+| `subscribes: ['cron.fire', 'task.requested'] as const` | Tuple terenumerasi | N edge konkret |
+| `subscribes: '*'` | Semua Event | Aura sisi kiri (tanpa edge) |
+| `emits` dihilangkan | Tidak melakukan emit apa pun (ctx.emit tak dapat dipakai) | Tanpa edge sisi kanan |
+| `emits: ['my.done', 'my.error'] as const` | Tuple terenumerasi | N edge konkret |
+| `emits: '*'` | Tipe apa pun yang terdaftar | Aura sisi kanan |
 
-## Recipe: add a new Producer
+## Resep: menambah Producer baru
 
-Producers are **not** objects implementing an interface — they're a
-declaration that returns a handle. Integrate into whatever module owns the
-external trigger (timer, HTTP route, bot handler).
+Producer **bukan** objek yang mengimplementasikan sebuah interface — ia adalah sebuah
+deklarasi yang mengembalikan sebuah handle. Integrasikan ke modul mana pun yang memiliki
+trigger eksternal (timer, route HTTP, handler bot).
 
 ```ts
 // In the module that owns the external source
@@ -160,53 +160,53 @@ await producer.emit('my.event', { ... })
 producer.dispose()  // call from the owning module's shutdown
 ```
 
-**Special case: adding a new Connector plugin.** If you're wiring a new
-Connector (Discord, Slack, IMAP, etc.), **do not** declare your own
-`message.received` / `message.sent` producer. That pump is owned by
-ConnectorCenter as a single shared `connectors` producer — your plugin
-calls `ctx.connectorCenter.emitMessageReceived(...)` /
-`ctx.connectorCenter.emitMessageSent(...)` at the points it observes
-incoming / outgoing messages. The `channel` field on the payload carries
-source attribution (`'web'` / `'telegram'` / ...). This keeps the Flow
-graph clean (one producer node, not one per connector) and means new
-connectors don't have to reinvent the lifecycle wiring each time.
+**Kasus khusus: menambah plugin Connector baru.** Kalau kamu menyambungkan Connector
+baru (Discord, Slack, IMAP, dll.), **jangan** mendeklarasikan Producer
+`message.received` / `message.sent` milikmu sendiri. Pump itu dimiliki oleh
+ConnectorCenter sebagai satu Producer `connectors` yang dipakai bersama — plugin-mu
+memanggil `ctx.connectorCenter.emitMessageReceived(...)` /
+`ctx.connectorCenter.emitMessageSent(...)` pada titik-titik di mana ia mengamati
+pesan masuk / keluar. Field `channel` pada payload membawa
+atribusi sumber (`'web'` / `'telegram'` / ...). Ini menjaga graph Flow
+tetap bersih (satu node Producer, bukan satu per connector) dan berarti connector baru
+tidak harus menemukan ulang wiring siklus hidup setiap kali.
 
-When choosing `emits`:
+Saat memilih `emits`:
 
-- **Prefer a narrow tuple.** A wildcard producer renders as an aura, which
-  hides *what it actually produces* from the Flow graph. Webhook-ingest is a
-  deliberate exception because its real shape is "whatever is in the external
-  allowlist"; even then the declaration is kept narrow
-  (`['task.requested'] as const`) and extended by hand when a new external
-  type lands.
-- **Runtime validation still fires.** A wildcard emit rejects unregistered
-  types; a narrow emit rejects anything not in the declared tuple.
+- **Utamakan tuple yang sempit.** Producer wildcard dirender sebagai aura, yang
+  menyembunyikan *apa yang sebenarnya ia produksi* dari graph Flow. Webhook-ingest adalah
+  pengecualian yang disengaja karena bentuk sebenarnya adalah "apa pun yang ada di allowlist
+  eksternal"; bahkan begitu, deklarasinya tetap dijaga sempit
+  (`['task.requested'] as const`) dan diperluas secara manual ketika tipe eksternal baru
+  muncul.
+- **Validasi runtime tetap berjalan.** Emit wildcard menolak tipe yang tidak terdaftar;
+  emit yang sempit menolak apa pun yang tidak ada di tuple yang dideklarasikan.
 
-## Recipe: open an event to HTTP (external trigger)
+## Resep: membuka Event ke HTTP (trigger eksternal)
 
-This is the step that's easiest to half-do. Four places to edit:
+Inilah langkah yang paling mudah dikerjakan setengah-setengah. Empat tempat yang harus diedit:
 
-1. **Event metadata** — set `external: true` on the event in [AgentEvents](../src/core/agent-event.ts).
-2. **Webhook-ingest producer** — extend the tuple in [web-plugin.ts](../src/connectors/web/web-plugin.ts):
+1. **Metadata Event** — set `external: true` pada Event di [AgentEvents](../src/core/agent-event.ts).
+2. **Producer webhook-ingest** — perluas tuple di [web-plugin.ts](../src/connectors/web/web-plugin.ts):
    ```ts
    this.ingestProducer = ctx.listenerRegistry.declareProducer({
      name: 'webhook-ingest',
      emits: ['task.requested', 'my.external.event'] as const,  // ← add
    })
    ```
-3. **Route type declaration** — matching tuple in [events.ts](../src/connectors/web/routes/events.ts):
+3. **Deklarasi tipe route** — tuple yang cocok di [events.ts](../src/connectors/web/routes/events.ts):
    ```ts
    ingestProducer: ProducerHandle<readonly ['task.requested', 'my.external.event']>
    ```
-4. **Admin docs** — add an entry to `EXTERNAL_DOCS` in
+4. **Dokumentasi admin** — tambahkan entry ke `EXTERNAL_DOCS` di
    [AutomationWebhookSection.tsx](../ui/src/pages/AutomationWebhookSection.tsx)
-   with `summary`, `fields`, `example`, and optional `notes`. The Webhook
-   tab renders this automatically for any type the topology API reports as
-   `external: true`; without an entry it falls back to a minimal card.
+   dengan `summary`, `fields`, `example`, dan opsional `notes`. Tab Webhook
+   merender ini secara otomatis untuk tipe apa pun yang dilaporkan API topology sebagai
+   `external: true`; tanpa entry ia jatuh ke kartu minimal.
 
-Auth, `isExternalEventType`, and schema validation are already handled by
-the `/api/events/ingest` route. Once the four steps above are done, callers
-do:
+Auth, `isExternalEventType`, dan validasi schema sudah ditangani oleh
+route `/api/events/ingest`. Setelah empat langkah di atas selesai, pemanggil
+melakukan:
 
 ```bash
 curl -X POST http://localhost:3002/api/events/ingest \
@@ -215,44 +215,44 @@ curl -X POST http://localhost:3002/api/events/ingest \
   -d '{"type":"my.external.event","payload":{...}}'
 ```
 
-See also: [webhook auth config](../data/config/webhook.json) (seeded empty —
-must add a token before `/ingest` will accept anything; otherwise it
-default-denies with 503).
+Lihat juga: [konfigurasi auth webhook](../data/config/webhook.json) (di-seed kosong —
+harus menambahkan token sebelum `/ingest` mau menerima apa pun; jika tidak, ia
+menolak secara default dengan 503).
 
-## Common pitfalls
+## Jebakan umum
 
-- **Calling `eventLog.append` directly from new code.** Works at runtime but
-  the event appears in the Flow graph with no producer — it looks orphaned
-  and is invisible to introspection. Declare a Producer instead.
-- **Forgetting `as const` on the emits tuple.** Without it, TS widens to
-  `string[]` and `ctx.emit` loses its type constraint; you'll see runtime
-  errors instead of compile errors.
-- **Name collision between a Listener and a Producer.** Registry throws at
-  declare time with `"already registered as a listener"` /
-  `"already registered as a producer"`. Pick a different name.
-- **Forgetting to update `agent-event.spec.ts` `expectedTypes`** — you'll
-  get a single failing test with a clear diff, but it's a common miss.
-- **Wildcard emit ≠ bypass.** `emits: '*'` still validates the type exists
-  in `AgentEvents` at runtime. Emitting an unregistered type throws.
-- **Producer emits don't auto-fill `causedBy`.** Producers have no parent
-  event; if the caller wants causality threading, they pass it explicitly
-  via `opts.causedBy`.
-- **Opening to HTTP without extending the webhook-ingest producer.** The
-  route gate (`isExternalEventType`) will pass, but the narrow-typed
-  `ingestProducer.emit(type, ...)` will throw because the type isn't in
-  its declared tuple. TS won't catch this unless you also update the
-  `ingestProducer: ProducerHandle<...>` type in `events.ts`.
-- **`dispose()` leaks.** Producers disposed on module shutdown free their
-  name in the registry. Forgetting it means a subsequent init fails with a
-  collision — mostly only visible in test suites that spin up/down.
+- **Memanggil `eventLog.append` langsung dari kode baru.** Jalan saat runtime tapi
+  Event muncul di graph Flow tanpa Producer — terlihat yatim
+  dan tak terlihat oleh introspeksi. Deklarasikan Producer sebagai gantinya.
+- **Lupa `as const` pada tuple emits.** Tanpanya, TS melebar ke
+  `string[]` dan `ctx.emit` kehilangan batasan tipenya; kamu akan melihat error runtime
+  alih-alih error kompilasi.
+- **Tabrakan nama antara Listener dan Producer.** Registry melempar saat
+  deklarasi dengan `"already registered as a listener"` /
+  `"already registered as a producer"`. Pilih nama lain.
+- **Lupa memperbarui `expectedTypes` di `agent-event.spec.ts`** — kamu akan
+  mendapat satu tes gagal dengan diff yang jelas, tapi ini kelalaian yang umum.
+- **Emit wildcard ≠ bypass.** `emits: '*'` tetap memvalidasi bahwa tipe ada
+  di `AgentEvents` saat runtime. Melakukan emit tipe yang tidak terdaftar akan melempar.
+- **Emit Producer tidak mengisi otomatis `causedBy`.** Producer tidak punya Event
+  parent; kalau pemanggil ingin menyalurkan kausalitas, ia memberikannya secara eksplisit
+  lewat `opts.causedBy`.
+- **Membuka ke HTTP tanpa memperluas Producer webhook-ingest.** Gerbang
+  route (`isExternalEventType`) akan lolos, tapi `ingestProducer.emit(type, ...)`
+  yang bertype sempit akan melempar karena tipe tidak ada di
+  tuple yang dideklarasikannya. TS tidak akan menangkap ini kecuali kamu juga memperbarui
+  tipe `ingestProducer: ProducerHandle<...>` di `events.ts`.
+- **`dispose()` bocor.** Producer yang di-dispose saat modul shutdown membebaskan
+  namanya di registry. Melupakannya berarti init berikutnya gagal dengan
+  tabrakan — kebanyakan hanya terlihat di test suite yang menyalakan/mematikan.
 
-## Debugging / observability
+## Debugging / observabilitas
 
-- **Flow tab** at `/automation` — live graph. Pulses when events fire.
-- **`GET /api/topology`** — raw JSON of event types + listeners + producers.
-  Useful when the Flow graph looks wrong: confirm the registry actually knows
-  about your new thing.
-- **`GET /api/events/stream`** — SSE of every event, raw.
-- **`GET /api/events/recent?type=foo&limit=N`** — in-memory ring-buffer.
-- **`event-metrics` listener** — a wildcard listener tracks per-type count +
-  last-seen timestamp; see [src/task/metrics/](../src/task/metrics/).
+- **Tab Flow** di `/automation` — graph langsung. Berdenyut saat Event terpicu.
+- **`GET /api/topology`** — JSON mentah berisi tipe Event + listener + producer.
+  Berguna saat graph Flow terlihat salah: pastikan registry benar-benar tahu
+  tentang hal baru milikmu.
+- **`GET /api/events/stream`** — SSE setiap Event, mentah.
+- **`GET /api/events/recent?type=foo&limit=N`** — ring-buffer di memori.
+- **Listener `event-metrics`** — listener wildcard yang melacak hitungan per-tipe +
+  timestamp last-seen; lihat [src/task/metrics/](../src/task/metrics/).

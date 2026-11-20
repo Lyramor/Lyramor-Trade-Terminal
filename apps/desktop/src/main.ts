@@ -193,7 +193,7 @@ app.whenReady().then(async () => {
       await relocateLegacyData(app.getPath('userData'), userDataHome)
     } catch (err) {
       dialog.showErrorBox(
-        'OpenAlice — data relocation failed',
+        'Lyramor — data relocation failed',
         `Could not move the user data store from\n${app.getPath('userData')}/data\nto\n${userDataHome}/data\n\n` +
           `${err instanceof Error ? err.message : String(err)}\n\nNothing was deleted. Please move the directory manually, then relaunch.`,
       )
@@ -268,9 +268,9 @@ app.whenReady().then(async () => {
   const utaReady = await waitForUTA(utaUrl)
   if (!utaReady) {
     dialog.showErrorBox(
-      'OpenAlice — trading service failed to start',
+      'Lyramor — trading service failed to start',
       `The UTA trading service did not become ready within ${UTA_READY_TIMEOUT_MS / 1000}s.\n\n` +
-        `OpenAlice can't start without it. Check the logs at ${join(userDataHome, 'logs')} and relaunch.`,
+        `Lyramor can't start without it. Check the logs at ${join(userDataHome, 'logs')} and relaunch.`,
     )
     shutdown()
     return
@@ -299,7 +299,7 @@ app.whenReady().then(async () => {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
-    title: 'OpenAlice',
+    title: 'Lyramor',
     webPreferences: {
       preload: resolve(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -315,8 +315,8 @@ app.whenReady().then(async () => {
     void dialog
       .showMessageBox(win, {
         type: 'info',
-        title: 'OpenAlice — update available',
-        message: `A newer version of OpenAlice is available: ${update.version}`,
+        title: 'Lyramor — update available',
+        message: `A newer version of Lyramor is available: ${update.version}`,
         detail: `You're on ${app.getVersion()}. Download the new version from the release page.`,
         buttons: ['Download', 'Later'],
         defaultId: 0,

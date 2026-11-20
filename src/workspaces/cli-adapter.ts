@@ -134,6 +134,14 @@ export interface CliAdapter {
      * set this; `shell` does not (no agent-turn concept).
      */
     readonly headless?: boolean;
+    /**
+     * The adapter exposes a bidirectional structured-JSON CHAT mode (via
+     * `composeChatCommand`) — the process stays alive, reads user messages from
+     * stdin as stream-json and emits agent events on stdout. Drives the chat-UI
+     * transport (`chat-session.ts`), a parallel to the PTY. Only claude sets
+     * this today.
+     */
+    readonly chat?: boolean;
   };
 
   /**
@@ -166,6 +174,16 @@ export interface CliAdapter {
    *   pi:       [pi, -p, --mode, json, <prompt>]
    */
   composeHeadlessCommand?(base: readonly string[], ctx: SpawnContext, prompt: string): readonly string[];
+
+  /**
+   * Bidirectional CHAT argv — the process stays alive and speaks stream-json on
+   * BOTH stdin (user messages) and stdout (agent events), driving the chat-UI
+   * transport. Like `composeHeadlessCommand` it MUST keep the same MCP injection
+   * as `composeCommand` so the agent reaches `inbox_push`. No prompt arg (the
+   * first message arrives over stdin). Present iff `capabilities.chat`.
+   *   claude: [...base, --input-format stream-json, --output-format stream-json, --verbose, -p]
+   */
+  composeChatCommand?(base: readonly string[], ctx: SpawnContext): readonly string[];
 
   /**
    * Extract the agent's OWN session id from one line of headless stdout.

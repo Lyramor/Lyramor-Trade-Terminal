@@ -1,7 +1,7 @@
 ---
 name: tool-audit
 description: >
-  Audit OpenAlice's AI tools end-to-end — call each one (using its declared
+  Audit Lyramor's AI tools end-to-end — call each one (using its declared
   example input as the starting point), judge whether it runs, whether its
   description / params / output are good, and write a review with concrete
   "how to change it" notes. Use when the developer wants to dogfood the tool
@@ -13,7 +13,7 @@ description: >
 
 # Tool audit
 
-You are auditing OpenAlice's AI tool surface from the **developer** side — not
+You are auditing Lyramor's AI tool surface from the **developer** side — not
 inside a workspace. The tools reach you over the `openalice` MCP server (wired
 by the repo-root `.mcp.json`). This is dogfooding: actually use each tool, then
 say what's wrong and how to fix it.

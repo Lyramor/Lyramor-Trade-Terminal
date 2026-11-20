@@ -26,16 +26,30 @@ const openaiKey: Credential = {
 
 function build(opts: { workspaces?: any[] } = {}) {
   const META = { id: 'ws-1', dir: '/w', agents: ['claude', 'opencode'], template: 'chat', tag: 'chat-x' };
+  // `capabilities.chat` decides the TRANSPORT quick-chat spawns into: a
+  // chat-capable runtime (claude) lands in the chat UI, everything else keeps
+  // the PTY. opencode has no stream-json chat mode, so it stays on `pool.spawn`.
   const opencode = {
     id: 'opencode',
     namePrefix: 'o',
+    capabilities: { chat: false },
     writeAiConfig: vi.fn(async () => {}),
     readAiConfig: vi.fn(async () => null), // workspace has no prior config
   };
-  const claude = { id: 'claude', namePrefix: 'c' };
+  const claude = {
+    id: 'claude',
+    namePrefix: 'c',
+    capabilities: { chat: true },
+    composeChatCommand: vi.fn(() => ['claude']),
+  };
   const adapters: Record<string, any> = { opencode, claude };
   const spawn = vi.fn(() => ({
     recordId: 'rec-1', wsId: 'ws-1', name: 'o1', pid: 1, agentSessionId: null, startedAt: 1,
+  }));
+  const chatSend = vi.fn();
+  const spawnChatSession = vi.fn(() => ({
+    recordId: 'rec-c', wsId: 'ws-1', name: 'c1', pid: 2, agentSessionId: null, startedAt: 1,
+    send: chatSend,
   }));
   const creator = { create: vi.fn(async () => ({ ok: true, workspace: META })) };
   const svc = {
@@ -52,10 +66,11 @@ function build(opts: { workspaces?: any[] } = {}) {
       remove: vi.fn(async () => {}),
     },
     pool: { spawn },
+    spawnChatSession,
     publicMeta: vi.fn(async () => META),
     config: { launcherRepoRoot: '/repo' },
   } as unknown as WorkspaceService;
-  return { app: createWorkspaceRoutes(svc), opencode, spawn, creator };
+  return { app: createWorkspaceRoutes(svc), opencode, spawn, creator, spawnChatSession, chatSend };
 }
 
 async function quickChat(app: any, body: unknown) {
@@ -112,24 +127,46 @@ describe('POST /quick-chat — loginless credential injection', () => {
   });
 
   it('claude is never injected (own CLI login) — vault is not even read', async () => {
-    const { app, spawn } = build();
+    const { app, spawnChatSession } = build();
     const r = await quickChat(app, { prompt: 'hi', agent: 'claude' });
     expect(r.status).toBe(201);
     expect(vi.mocked(readCredentials)).not.toHaveBeenCalled();
+    expect(spawnChatSession).toHaveBeenCalledOnce();
+  });
+
+  // Transport routing: Ask Alice is the front door for people who don't want a
+  // terminal, so a chat-capable runtime must land in the chat UI — and the seed
+  // prompt has to arrive over stdin, since chat mode takes no prompt positional.
+  it('claude → chat transport, seeded with the prompt (never the PTY pool)', async () => {
+    const { app, spawn, spawnChatSession, chatSend } = build();
+    const r = await quickChat(app, { prompt: 'analisa BBCA', agent: 'claude' });
+    expect(r.status).toBe(201);
+    expect(spawnChatSession).toHaveBeenCalledOnce();
+    expect(spawn).not.toHaveBeenCalled();
+    expect(chatSend).toHaveBeenCalledWith('analisa BBCA');
+    expect(r.body.session.title).toBe('analisa BBCA');
+  });
+
+  it('opencode has no chat mode → still the PTY pool', async () => {
+    vi.mocked(readCredentials).mockResolvedValue({ 'openai-1': openaiKey });
+    const { app, spawn, spawnChatSession } = build();
+    const r = await quickChat(app, { prompt: 'hi', agent: 'opencode' });
+    expect(r.status).toBe(201);
     expect(spawn).toHaveBeenCalledOnce();
+    expect(spawnChatSession).not.toHaveBeenCalled();
   });
 
   // targetWsId — the chat sidebar's per-workspace "+": spawn INTO the given
   // workspace, not today's (so no creator.create).
   it('targetWsId spawns into the given workspace, skipping find-or-create', async () => {
-    const { app, spawn, creator } = build({
+    const { app, spawnChatSession, creator } = build({
       workspaces: [{ id: 'ws-1', dir: '/w', agents: ['claude'], template: 'chat', tag: 'chat-x' }],
     });
     const r = await quickChat(app, { prompt: 'hi', agent: 'claude', targetWsId: 'ws-1' });
     expect(r.status).toBe(201);
     expect(creator.create).not.toHaveBeenCalled(); // reused, not created
-    expect(spawn).toHaveBeenCalledOnce();
-    expect((spawn.mock.calls[0] as any[])[0]).toBe('ws-1'); // spawned into the target
+    expect(spawnChatSession).toHaveBeenCalledOnce();
+    expect((spawnChatSession.mock.calls[0] as any[])[0]).toBe('ws-1'); // spawned into the target
   });
 
   it('unknown targetWsId → 404 workspace_not_found, no spawn', async () => {

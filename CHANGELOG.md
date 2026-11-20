@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to OpenAlice will be documented in this file.
+All notable changes to Lyramor will be documented in this file.
 
 ## [Unreleased]
 

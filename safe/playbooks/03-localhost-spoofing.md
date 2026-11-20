@@ -14,15 +14,15 @@ is configured. XFF-spoof + Host-spoof cases covered by
 
 ## What this class is
 
-The plan for OpenAlice's auth is to skip auth for **true localhost**
+The plan for Lyramor's auth is to skip auth for **true localhost**
 requests, preserving zero-friction dev UX (`pnpm dev` → browser localhost:5173 → works without login).
 
 But "true localhost" is subtle. Common implementation mistakes:
 
 1. **Check `req.socket.remoteAddress === '127.0.0.1'`** — fine in raw
-   deploys, BUT in production OpenAlice typically sits behind a reverse
+   deploys, BUT in production Lyramor typically sits behind a reverse
    proxy (Caddy / nginx / Cloudflare Tunnel). The proxy IS at 127.0.0.1
-   to OpenAlice. So **every** request looks like localhost.
+   to Lyramor. So **every** request looks like localhost.
 2. **Trust `X-Forwarded-For` header** — usually correct in proxy setups,
    but if you trust this header unconditionally, an internet attacker can
    send `X-Forwarded-For: 127.0.0.1` and claim localhost.

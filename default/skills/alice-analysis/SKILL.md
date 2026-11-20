@@ -1,7 +1,7 @@
 ---
 name: alice-analysis
 description: >
-  How to compute technical analysis with OpenAlice's Quant Calculator (v2) via
+  How to compute technical analysis with Lyramor's Quant Calculator (v2) via
   `alice analysis` — a small Python/pandas-subset scripting language over
   K-lines, keyed by barId so you compute on a SPECIFIC source — prefer a
   broker's bars (matches what you trade, realtime) over a free vendor like

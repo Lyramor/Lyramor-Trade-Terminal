@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/alice-full.png" alt="OpenAlice" width="140">
+  <img src="docs/images/alice-full.png" alt="Lyramor" width="140">
 </p>
 
-<h1 align="center">OpenAlice</h1>
+<h1 align="center">Lyramor</h1>
 
 <p align="center">
   <strong>Your one-person Wall Street.</strong><br>
@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <a href="https://openalice.ai"><img src="https://img.shields.io/badge/Website-blue" alt="Website"></a> · <a href="https://openalice.ai/docs"><img src="https://img.shields.io/badge/Docs-green" alt="Docs"></a> · <a href="https://x.com/OpenAliceAI"><img src="https://img.shields.io/badge/X-000000?logo=x&logoColor=white" alt="X (Twitter)"></a> · <a href="https://discord.gg/zf4STmrQd8"><img src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white" alt="Discord"></a> · <a href="https://qm.qq.com/q/iSg6O4FmrC"><img src="https://img.shields.io/badge/QQ-12B7F5" alt="QQ"></a>
+  <a href="https://openalice.ai"><img src="https://img.shields.io/badge/Website-blue" alt="Website"></a> · <a href="https://openalice.ai/docs"><img src="https://img.shields.io/badge/Docs-green" alt="Docs"></a> · <a href="https://x.com/LyramorAI"><img src="https://img.shields.io/badge/X-000000?logo=x&logoColor=white" alt="X (Twitter)"></a> · <a href="https://discord.gg/zf4STmrQd8"><img src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white" alt="Discord"></a> · <a href="https://qm.qq.com/q/iSg6O4FmrC"><img src="https://img.shields.io/badge/QQ-12B7F5" alt="QQ"></a>
 </p>
 
 <p align="center">
-  <img src="docs/images/preview.png" alt="OpenAlice Preview" width="720">
+  <img src="docs/images/preview.png" alt="Lyramor Preview" width="720">
 </p>
 
 - **Full-spectrum** — analyze and trade across asset classes. Multiple brokers combine into one unified workspace so you're never stuck with "I can see it but can't trade it."
@@ -24,7 +24,7 @@
 Alice runs on your own machine, because trading involves private keys and real money — that trust can't be outsourced.
 
 > [!CAUTION]
-> **OpenAlice is experimental software in active development.** Many features and interfaces are incomplete and subject to breaking changes. Do not use this software for live trading with real funds unless you fully understand and accept the risks involved. The authors provide no guarantees of correctness, reliability, or profitability, and accept no liability for financial losses.
+> **Lyramor is experimental software in active development.** Many features and interfaces are incomplete and subject to breaking changes. Do not use this software for live trading with real funds unless you fully understand and accept the risks involved. The authors provide no guarantees of correctness, reliability, or profitability, and accept no liability for financial losses.
 
 ## Features
 
@@ -53,7 +53,7 @@ Two ways a run is triggered:
 ### Interface
 
 - **Web UI** — workspace chat, the Inbox, a portfolio dashboard with equity curve, and full config management
-- **Workspace** — a per-task directory + git repo + persistent terminal session running your chosen agent CLI (`claude` / `codex` / `opencode` / `pi` / `shell`) with OpenAlice's MCP tools plumbed in. The recommended path for any non-trivial AI work — native prompt cache, native rendering, no protocol shim
+- **Workspace** — a per-task directory + git repo + persistent terminal session running your chosen agent CLI (`claude` / `codex` / `opencode` / `pi` / `shell`) with Lyramor's MCP tools plumbed in. The recommended path for any non-trivial AI work — native prompt cache, native rendering, no protocol shim
 - **Inbox** — workspace-to-user push channel. Agents call `inbox_push` from inside a workspace to surface a document (rendered live) plus a markdown comment in a dedicated tab; click the reply bar to jump back into the workspace and continue
 - **MCP server** — tool exposure for external agents
 
@@ -65,7 +65,7 @@ Two ways a run is triggered:
 
 ## Architecture
 
-OpenAlice splits into **two long-lived processes** managed by a thin
+Lyramor splits into **two long-lived processes** managed by a thin
 supervisor:
 
 ```mermaid
@@ -146,7 +146,7 @@ and steer Alice.
 
 **Workspace** — A per-task directory + git repo + persistent terminal
 session running a native agent CLI. The recommended substrate for
-non-trivial AI work. Wired to OpenAlice via two MCP servers in
+non-trivial AI work. Wired to Lyramor via two MCP servers in
 `.mcp.json`: a global one (full tool catalog) and a per-workspace one
 (workspace-scoped tools like `inbox_push`, with the wsId carried in the
 URL path so the agent never traffics its own identity).
@@ -207,26 +207,26 @@ agent runtime that drives trading decisions.
 
 **Data Hub (TraderHub)** — The hosted low-frequency data source. Market boards (macro, movers, calendars, global macro, Fed, shipping, term structure, sector rotation) and keyed datasets (FRED / EIA / BLS series, FMP calendars, FX rates) resolve **hub → your own keys → loud error**, so a fresh install needs zero data-provider accounts. Every payload is stamped with its serving path (`hub` / `local`) and staleness — explicit, never silent. The hub is a convenience layer, not a correctness dependency: switch it off (Settings › Market Data) or point `baseUrl` at a self-hosted instance and behavior falls back to exactly the bring-your-own-keys model. K-lines and quotes deliberately stay off the hub — realtime data comes from your broker (via UTA) or vendor, where the incentives live. Hub responses are shape-checked data only, never configuration.
 
-**Workspace** — A directory + git repo + persistent terminal session running a native agent CLI (`claude`, `codex`, `opencode`, `pi`, or `shell`) of your choice. OpenAlice plumbs its MCP servers into the workspace via `.mcp.json`, so the agent inside sees the workspace's local files plus OpenAlice's full tool surface (trading, market data, news, analysis). Workspaces live under `~/.openalice/workspaces/<wsId>/` — each is its own self-contained scratch directory the agent can read, write, and `git commit` inside. This is the recommended substrate for any non-trivial AI work: native prompt cache, native CLI rendering, no protocol shim between you and the model. Capability extensions (browser automation, third-party CLIs, custom scrapers) ship as new workspace **templates** rather than `src/` dependencies, keeping the main repo small.
+**Workspace** — A directory + git repo + persistent terminal session running a native agent CLI (`claude`, `codex`, `opencode`, `pi`, or `shell`) of your choice. Lyramor plumbs its MCP servers into the workspace via `.mcp.json`, so the agent inside sees the workspace's local files plus Lyramor's full tool surface (trading, market data, news, analysis). Workspaces live under `~/.openalice/workspaces/<wsId>/` — each is its own self-contained scratch directory the agent can read, write, and `git commit` inside. This is the recommended substrate for any non-trivial AI work: native prompt cache, native CLI rendering, no protocol shim between you and the model. Capability extensions (browser automation, third-party CLIs, custom scrapers) ship as new workspace **templates** rather than `src/` dependencies, keeping the main repo small.
 
-**Templates & satellite repos** — A workspace template is a bootstrap script + initial file set that materializes a workspace of a particular shape (today: `chat`, `auto-quant`). Templates are how OpenAlice's ecosystem grows without bloating the main repo: when a new capability (a research toolkit, a backtest harness, a custom MCP server) is worth packaging, it lives in its own **satellite repo** that a template clones at bootstrap time. The main repo deliberately doesn't accept ecosystem PRs — it owns the Trading domain and the workspace launcher; everything else routes through satellite repos referenced by templates. Means template authors can ship on their own cadence, and OpenAlice's `src/` stays small.
+**Templates & satellite repos** — A workspace template is a bootstrap script + initial file set that materializes a workspace of a particular shape (today: `chat`, `auto-quant`). Templates are how Lyramor's ecosystem grows without bloating the main repo: when a new capability (a research toolkit, a backtest harness, a custom MCP server) is worth packaging, it lives in its own **satellite repo** that a template clones at bootstrap time. The main repo deliberately doesn't accept ecosystem PRs — it owns the Trading domain and the workspace launcher; everything else routes through satellite repos referenced by templates. Means template authors can ship on their own cadence, and Lyramor's `src/` stays small.
 
 **Inbox** — Workspace-to-user push channel. Agents working inside a workspace call the `inbox_push` MCP tool to surface docs (rendered live from workspace files) plus markdown commentary in a dedicated Inbox tab. The user reads, then clicks the reply bar at the bottom of the entry to jump back into the workspace's session and continue the conversation there. Scheduled runs deliver here too: a self-scheduled (or externally-triggered) headless Workspace's agent calls `inbox_push` like any other — the Inbox is the single push surface.
 
 ## Workspace chat
 
-Chatting with Alice happens inside a **workspace**: a directory + git repo + a persistent terminal session running the native CLI of your chosen agent (`claude`, `codex`, `opencode`, `pi`, or `shell`). The CLI process handles all model interaction, prompt caching, and rendering — OpenAlice's job is to plumb its MCP server into the workspace and surface the terminal in the UI.
+Chatting with Alice happens inside a **workspace**: a directory + git repo + a persistent terminal session running the native CLI of your chosen agent (`claude`, `codex`, `opencode`, `pi`, or `shell`). The CLI process handles all model interaction, prompt caching, and rendering — Lyramor's job is to plumb its MCP server into the workspace and surface the terminal in the UI.
 
 - **Native prompt cache.** Claude Code, Codex, and the other agent CLIs implement vendor-specific cache control we can't replicate. On a long conversation this is often a 10× cost reduction.
 - **Native frontend.** TUI rendering, syntax highlighting, diff display — the CLI vendor has already tuned these for their model.
-- **Full tool surface.** The CLI sees the workspace's local files plus OpenAlice's MCP tools (trading, market data, news, analysis). No "greatest-common-denominator" trimming. Market data needs no API keys by default — the Data Hub serves it.
+- **Full tool surface.** The CLI sees the workspace's local files plus Lyramor's MCP tools (trading, market data, news, analysis). No "greatest-common-denominator" trimming. Market data needs no API keys by default — the Data Hub serves it.
 - **No protocol shim.** Nothing sits between you and the model — whatever the CLI can do, you can do.
 
-The only requirement: the CLI binary has to be installed on the host running OpenAlice (the Docker image bundles `claude` and `codex`).
+The only requirement: the CLI binary has to be installed on the host running Lyramor (the Docker image bundles `claude` and `codex`).
 
 ## Quick Start
 
-> **Heads up:** there's no native installer yet. To try OpenAlice today you
+> **Heads up:** there's no native installer yet. To try Lyramor today you
 > clone the repo and run it from source — this section is the contributor /
 > early-adopter path. A DMG (macOS) + Windows installer are in flight; once
 > they ship, the steps below collapse to "download, open, done."
@@ -262,7 +262,7 @@ First-time `pnpm install` pulls the full monorepo + native deps (notably
 `node-pty` for terminal sessions). On a normal connection allow ~1 minute.
 
 > pnpm may print *"Ignored build scripts: ccxt, esbuild, protobufjs"* — this
-> is fine, those are optional native optimizations and OpenAlice doesn't need
+> is fine, those are optional native optimizations and Lyramor doesn't need
 > them. You can run `pnpm approve-builds` later if you want to opt in.
 
 ### 2. Start it
@@ -324,18 +324,18 @@ Still stuck → see [Getting Help](#getting-help).
 
 ### Windows
 
-OpenAlice's Workspace feature spawns bash-based bootstrap scripts to materialize new workspaces, so a POSIX shell environment is required:
+Lyramor's Workspace feature spawns bash-based bootstrap scripts to materialize new workspaces, so a POSIX shell environment is required:
 
 - **Recommended:** install [Git for Windows](https://gitforwindows.org/) and accept the default *"Use Git from the Windows Command Prompt"* option during setup — this puts `bash` plus the POSIX utilities the scripts depend on (`sed`, `cp`, `mkdir`, `basename`, `printf`, etc.) on your PATH.
-- **Alternative:** run OpenAlice from inside [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) — the Linux env handles everything natively.
+- **Alternative:** run Lyramor from inside [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) — the Linux env handles everything natively.
 
 Native `cmd.exe` / PowerShell alone are not supported (no `bash`, no POSIX utilities). If `bash` isn't on PATH when you create a workspace, the bootstrap fails with an inline hint pointing back here.
 
-Note: we don't currently dogfood OpenAlice on Windows, so the broader experience (PTY rendering, file watching, paths with spaces) may have rough edges. Bug reports very welcome.
+Note: we don't currently dogfood Lyramor on Windows, so the broader experience (PTY rendering, file watching, paths with spaces) may have rough edges. Bug reports very welcome.
 
 ## Authentication
 
-OpenAlice has a single admin-token gate at the web boundary. Three modes,
+Lyramor has a single admin-token gate at the web boundary. Three modes,
 keyed off whether the bound interface is loopback:
 
 **Local dev** (`pnpm dev`) — zero friction. Requests from `127.0.0.1` /
@@ -406,7 +406,7 @@ for how to retrieve the first-run token from `docker logs`.
 
 ## Remote access (Tailscale / LAN / reverse proxy)
 
-Once the bind + admin token basics are in place, OpenAlice works over
+Once the bind + admin token basics are in place, Lyramor works over
 any network path. Ordered from most to least recommended:
 
 **Tailscale / VPN / LAN — direct.** Bind a non-loopback interface and
@@ -497,7 +497,7 @@ On first run, defaults are auto-copied to the user override path. Edit the user 
 
 ## Project Structure
 
-OpenAlice is a pnpm monorepo with Turborepo build orchestration. See [docs/project-structure.md](docs/project-structure.md) for the full file tree.
+Lyramor is a pnpm monorepo with Turborepo build orchestration. See [docs/project-structure.md](docs/project-structure.md) for the full file tree.
 
 ## Getting Help
 
@@ -513,7 +513,7 @@ Stuck? Here's the recommended path, roughly in order:
 
 ## Contributors
 
-OpenAlice is sharper for the people who dig into it with us — the bugs they
+Lyramor is sharper for the people who dig into it with us — the bugs they
 catch, the ideas they push, the designs and reviews they bring. Credit to every
 one. The people who've left a mark:
 

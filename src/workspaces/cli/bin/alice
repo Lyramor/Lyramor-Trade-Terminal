@@ -37,7 +37,7 @@ async function main() {
   const mcpUrl = process.env.OPENALICE_MCP_URL || 'http://127.0.0.1:47332/mcp'
   const wsId = process.env.AQ_WS_ID
   if (!wsId) {
-    fail('AQ_WS_ID is not set — run from inside an OpenAlice workspace.')
+    fail('AQ_WS_ID is not set — run from inside a Lyramor workspace.')
   }
   // Derive the CLI base from the MCP URL: .../mcp -> .../cli/<wsId>/<export>
   const base = mcpUrl.replace(/\/+$/, '').replace(/\/mcp$/, '/cli') + '/' + wsId + '/' + exportKey
@@ -115,7 +115,7 @@ async function fetchJson(url, opts) {
   try {
     resp = await fetch(url, opts)
   } catch (e) {
-    fail(`cannot reach OpenAlice at ${url} — is the backend running? (${e && e.message})`)
+    fail(`cannot reach Lyramor at ${url} — is the backend running? (${e && e.message})`)
   }
   let body = null
   const text = await resp.text()
@@ -181,7 +181,7 @@ function parseFlags(tokens) {
 function printGroups(m) {
   const groups = Object.keys(m.groups)
   const width = Math.max(...groups.map((g) => g.length), 1)
-  out(`OpenAlice CLI — ${BIN} <group> <verb> [--flags]`)
+  out(`Lyramor CLI — ${BIN} <group> <verb> [--flags]`)
   if (m.description) out(m.description)
   out('')
   for (const g of groups) {

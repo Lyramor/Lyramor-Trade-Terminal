@@ -326,7 +326,7 @@ export const zh: Resources = {
     emptyBody: '未发现任何模板。请检查发射架的模板目录。',
     communityTitle: '社区',
     communityDescription:
-      '第三方生态的打包模板——创建工作区时从上游仓库全新 clone，由原作者维护，而非 OpenAlice。',
+      '第三方生态的打包模板——创建工作区时从上游仓库全新 clone，由原作者维护，而非 Lyramor。',
     communityBadge: '社区',
     agentsLabel: 'Agents',
     agentNotInstalled: '本机未安装',
@@ -347,7 +347,7 @@ export const zh: Resources = {
     create: '创建工作区',
   },
   auth: {
-    heading: '登录 OpenAlice',
+    heading: '登录 Lyramor',
     instruction: '粘贴首次启动时显示的管理员令牌。',
     adminTokenLabel: '管理员令牌',
     signingIn: '登录中…',

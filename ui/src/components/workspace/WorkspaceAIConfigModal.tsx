@@ -591,7 +591,7 @@ export function WorkspaceAIConfigModal({ wsId, onClose }: Props) {
             any open session to re-load.
             {tab === 'claude' && ' Claude reads `.claude/settings.local.json` from the workspace cwd.'}
             {tab === 'codex' && ' Codex reads `.codex/config.toml` + `.codex/env.json` (via CODEX_HOME).'}
-            {tab === 'opencode' && ' opencode reads `opencode.json` from the workspace cwd; OpenAlice injects its MCP servers at spawn.'}
+            {tab === 'opencode' && ' opencode reads `opencode.json` from the workspace cwd; Lyramor injects its MCP servers at spawn.'}
             {tab === 'pi' && ' Pi reads `.pi-agent/models.json` (via PI_CODING_AGENT_DIR); tools reach it via the `alice` CLI on PATH.'}
           </p>
         </div>

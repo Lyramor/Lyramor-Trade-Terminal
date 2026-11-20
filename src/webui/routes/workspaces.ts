@@ -219,6 +219,94 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     }
   }
 
+  /**
+   * Spawn one CHAT-transport session — the structured stream-json path rendered
+   * as the chat UI. Shared core of `POST /:id/sessions/chat` and the chat branch
+   * of `POST /quick-chat`, mirroring `spawnInteractiveSession`'s shape so the
+   * two transports can't drift on record creation / bootstrap / naming.
+   *
+   * `initialPrompt` can't ride the argv here the way it does for the TUI (chat
+   * takes no prompt positional — the first message arrives over stdin), so it's
+   * delivered as the session's first message right after spawn.
+   */
+  async function spawnChatSessionFor(
+    meta: WorkspaceMeta,
+    opts: { readonly agentId?: string; readonly initialPrompt?: string },
+  ): Promise<SpawnSessionResult> {
+    const id = meta.id;
+    const { agentId, initialPrompt } = opts;
+    if (agentId && !svc.adapters.get(agentId)) {
+      return { ok: false, status: 400, body: { error: 'unknown_agent', message: `no adapter: ${agentId}` } };
+    }
+    const adapter = svc.resolveAdapter(meta, agentId);
+    if (!adapter.capabilities.chat || !adapter.composeChatCommand) {
+      return {
+        ok: false,
+        status: 400,
+        body: { error: 'chat_unsupported', message: `agent "${adapter.id}" has no chat mode (claude only for now)` },
+      };
+    }
+    try {
+      if (adapter.bootstrap) {
+        await adapter.bootstrap({ wsId: id, cwd: meta.dir, launcherRepoRoot: svc.config.launcherRepoRoot });
+      }
+    } catch (err) {
+      launcherLogger.error('adapter.bootstrap_failed', { id, agent: adapter.id, err });
+      return { ok: false, status: 500, body: { error: 'bootstrap_failed', message: (err as Error).message } };
+    }
+    await svc.sessionRegistry.ensureLoaded(id);
+    const prefix = adapter.namePrefix ?? adapter.id[0] ?? 's';
+    const recordId = randomUUID();
+    const recordName = svc.sessionRegistry.nextName(id, adapter.id, prefix);
+    const nowIso = new Date().toISOString();
+    const title = initialPrompt ? initialPrompt.slice(0, MAX_SESSION_TITLE) : undefined;
+    const record: SessionRecord = {
+      id: recordId,
+      wsId: id,
+      agent: adapter.id,
+      name: recordName,
+      createdAt: nowIso,
+      lastActiveAt: nowIso,
+      state: 'running',
+      transport: 'chat',
+      ...(title !== undefined ? { title } : {}),
+    };
+    try {
+      await svc.sessionRegistry.create(record);
+    } catch (err) {
+      launcherLogger.error('session_registry.create_failed', { id, recordId, err });
+      return { ok: false, status: 500, body: { error: 'registry_failed', message: (err as Error).message } };
+    }
+    try {
+      const session = svc.spawnChatSession(id, adapter, recordId);
+      // Seed BEFORE the client attaches: `send` echoes a `user` event into the
+      // transcript, so the message and its reply are replayed on attach — the
+      // user sees their own prompt in the conversation, not an empty box.
+      if (initialPrompt) session.send(initialPrompt);
+      launcherLogger.info('workspace.chat_session_spawned', {
+        id, sessionId: recordId, name: recordName, pid: session.pid, agent: adapter.id,
+        seeded: !!initialPrompt,
+      });
+      return {
+        ok: true,
+        session: {
+          sessionId: recordId,
+          wsId: id,
+          name: recordName,
+          pid: session.pid ?? 0,
+          agent: adapter.id,
+          agentSessionId: session.agentSessionId,
+          startedAt: session.startedAt,
+          title: title ?? null,
+        },
+      };
+    } catch (err) {
+      await svc.sessionRegistry.remove(id, recordId).catch(() => undefined);
+      launcherLogger.error('workspace.chat_spawn_failed', { id, err });
+      return { ok: false, status: 500, body: { error: 'spawn_failed', message: (err as Error).message } };
+    }
+  }
+
   // TODAY's chat workspace, by its daily tag (`chat-jun15`). A workspace someone
   // happened to tag `chat-jun15` with a non-chat template doesn't count — the
   // daily bucket is a chat-template workspace.
@@ -455,6 +543,15 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
         return [] as readonly SessionRecord[];
       });
     await svc.scrollbackStore.removeAllFor(id);
+    // Chat records aren't in the PTY pool, so the `pool.dispose` above misses
+    // them: kill each agent and drop its transcript explicitly.
+    for (const rec of droppedRecords) {
+      if (rec.transport !== 'chat') continue;
+      svc.chat.stop(rec.id);
+      await svc.removeChatTranscript(rec.id).catch((err: unknown) =>
+        launcherLogger.warn('chat_transcript.remove_failed', { id, sessionId: rec.id, err }),
+      );
+    }
     let purged = false;
     if (purge) {
       try {
@@ -591,6 +688,33 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     return c.json(result.session, 201);
   });
 
+  // Spawn a CHAT-transport session — the structured stream-json path rendered
+  // as a chat UI (vs the raw PTY terminal of `/sessions/spawn`). Same record
+  // pre-allocation + bootstrap, but the process is a `ChatSession` and the
+  // record carries `transport: 'chat'` so the frontend binds the chat WS + view.
+  app.post('/:id/sessions/chat', async (c) => {
+    const id = c.req.param('id');
+    if (!validId(id)) return c.json({ error: 'not_found' }, 404);
+    const meta = svc.registry.get(id);
+    if (!meta) return c.json({ error: 'not_found' }, 404);
+
+    let agentId: string | undefined;
+    try {
+      const body = await safeJson(c);
+      const fields = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+      const rawAgent = fields['agent'];
+      if (typeof rawAgent === 'string' && rawAgent.length > 0) agentId = rawAgent;
+    } catch (err) {
+      return c.json({ error: 'bad_request', message: (err as Error).message }, 400);
+    }
+
+    const result = await spawnChatSessionFor(meta, {
+      ...(agentId !== undefined ? { agentId } : {}),
+    });
+    if (!result.ok) return c.json(result.body, result.status as 400 | 500);
+    return c.json(result.session, 201);
+  });
+
   // Quick-chat launch — the "type a message → you're in" front door, decoupled
   // from the multi-step create-workspace UI. Enters TODAY's chat workspace
   // (creating it on the day's first use), then spawns a fresh interactive session
@@ -648,16 +772,27 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     // it from the vault before spawn. The dead-end (no compatible credential at
     // all) returns 400 no_ai_credential so the composer bounces to Settings
     // instead of spawning an agent that'll instantly die on a missing key.
-    const effectiveAgent = svc.resolveAdapter(meta, agentId).id;
+    const adapter = svc.resolveAdapter(meta, agentId);
+    const effectiveAgent = adapter.id;
     if (LOGINLESS_AGENTS.has(effectiveAgent)) {
       const inject = await injectLoginlessCredential(meta, effectiveAgent, credentialSlug);
       if (!inject.ok) return c.json(inject.body, inject.status as 400);
     }
 
-    const spawn = await spawnInteractiveSession(meta, {
-      ...(agentId !== undefined ? { agentId } : {}),
-      initialPrompt: prompt,
-    });
+    // Chat UI by default: Ask Alice is the front door for people who are NOT
+    // here for a terminal, so a chat-capable runtime lands in the chat view and
+    // only the rest (codex/opencode/pi, no stream-json chat mode) falls back to
+    // the TUI. Capability-gated, not an `=== 'claude'` check.
+    const useChat = adapter.capabilities.chat === true && adapter.composeChatCommand !== undefined;
+    const spawn = useChat
+      ? await spawnChatSessionFor(meta, {
+          ...(agentId !== undefined ? { agentId } : {}),
+          initialPrompt: prompt,
+        })
+      : await spawnInteractiveSession(meta, {
+          ...(agentId !== undefined ? { agentId } : {}),
+          initialPrompt: prompt,
+        });
     if (!spawn.ok) return c.json(spawn.body, spawn.status as 400 | 500);
     return c.json({ workspace: await svc.publicMeta(meta), session: spawn.session }, 201);
   });
@@ -1135,7 +1270,16 @@ export function createWorkspaceRoutes(svc: WorkspaceService): Hono {
     }
     const record = svc.sessionRegistry.get(id, token);
     if (!record) return c.json({ error: 'not_found' }, 404);
-    const wasRunning = svc.pool.disposeToken(token, 'session deleted');
+    // Chat records live in the `chat` manager, not the PTY pool — `disposeToken`
+    // would silently no-op on them and leave the agent process (and its
+    // transcript file) behind.
+    const wasRunning =
+      record.transport === 'chat'
+        ? svc.chat.stop(token)
+        : svc.pool.disposeToken(token, 'session deleted');
+    if (record.transport === 'chat') {
+      await svc.removeChatTranscript(token);
+    }
     if (record.scrollbackFile) {
       await svc.scrollbackStore.remove(record.scrollbackFile);
     }

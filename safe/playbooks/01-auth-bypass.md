@@ -175,7 +175,7 @@ curl -i "http://localhost:47331/api/trading/uta/%2F../config"
 - Difference reveals route existence to unauthenticated callers
 
 **Secure behavior**: depends on threat model. Some sites unify all
-unauth responses as 401. OpenAlice can do either — but the choice should
+unauth responses as 401. Lyramor can do either — but the choice should
 be intentional and documented.
 
 **Current**: routes mostly return 200, fakes return 404 — clear distinction.

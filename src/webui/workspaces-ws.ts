@@ -40,7 +40,7 @@ function readSessionCookie(cookieHeader: string | undefined): string | null {
   return null;
 }
 
-async function isUpgradeAuthorized(req: IncomingMessage): Promise<boolean> {
+export async function isUpgradeAuthorized(req: IncomingMessage): Promise<boolean> {
   if (process.env['OPENALICE_DISABLE_AUTH'] === '1') return true;
 
   const trustedProxies = (process.env['OPENALICE_TRUSTED_PROXIES'] ?? '')

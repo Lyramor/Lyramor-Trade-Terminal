@@ -15,7 +15,7 @@ description: >
 
 # Research & data — `alice`
 
-`alice` is OpenAlice's read surface on your PATH. Output is JSON on stdout
+`alice` is Lyramor's read surface on your PATH. Output is JSON on stdout
 (pipe it: `alice market search --query AAPL | jq '.results[0]'`); a non-zero
 exit means it failed, with the reason on stderr.
 

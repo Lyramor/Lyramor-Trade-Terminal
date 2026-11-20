@@ -1,6 +1,6 @@
 # Architecture (for the red-team agent)
 
-This file gives you enough of OpenAlice's runtime shape to attack it
+This file gives you enough of Lyramor's runtime shape to attack it
 intelligently. For positioning/marketing, read the root `README.md` — this
 file is technical-only.
 
@@ -107,7 +107,7 @@ outside the host).
 
 ## Guardian supervisor
 
-Guardian (`scripts/guardian/`) is the L2 in OpenAlice's
+Guardian (`scripts/guardian/`) is the L2 in Lyramor's
 [port-architecture-3-layers](../../docs) model. It:
 
 - Probes free ports (47331, 47332, 47333)

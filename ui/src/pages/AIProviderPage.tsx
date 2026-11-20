@@ -199,7 +199,7 @@ export function AIProviderPage() {
               <p className="text-[13px] text-text-muted leading-relaxed">
                 The agent runtimes a workspace can launch — a credential above feeds whichever
                 one a workspace (or cron job) runs. Pick by the models/provider you want; every
-                runtime reaches the full OpenAlice tool surface either way (native MCP where
+                runtime reaches the full Lyramor tool surface either way (native MCP where
                 supported, the <code className="font-mono text-[11.5px]">alice</code> CLI on PATH
                 otherwise). The model is chosen per workspace, not here.
               </p>

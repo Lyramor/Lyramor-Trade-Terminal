@@ -12,7 +12,7 @@ credentials, exploit known CVEs.
 start without auth; admin token is randomly generated, not a default.
 
 ### 2. Targeted attacker with code knowledge
-**Capability**: knows OpenAlice is open-source, has read this repo. Knows
+**Capability**: knows Lyramor is open-source, has read this repo. Knows
 endpoint paths, auth mechanism, file layouts. Could craft specific
 exploits against known weaknesses.
 
@@ -25,7 +25,7 @@ through obscurity.
 **Capability**: man-in-the-middle on the wire if TLS is misconfigured;
 session cookie sniffing; replay attacks.
 
-**Coverage**: medium. OpenAlice mandates that public deployment is behind
+**Coverage**: medium. Lyramor mandates that public deployment is behind
 a TLS-terminating reverse proxy (Caddy, nginx, Cloudflare Tunnel). We
 trust `X-Forwarded-Proto` only when an explicit trusted-proxy IP is
 configured. Cookies are `Secure` + `HttpOnly` + `SameSite=Lax`.
@@ -85,7 +85,7 @@ availability. Application-level rate limiting on auth endpoints is
 in-scope, but full DDoS resistance is not.
 
 ### Multi-tenant isolation
-OpenAlice is single-user by design. There is one "admin." We do not
+Lyramor is single-user by design. There is one "admin." We do not
 defend "user A from user B" because there is no user B at the application
 level. If multi-tenant arrives, this section will be rewritten.
 

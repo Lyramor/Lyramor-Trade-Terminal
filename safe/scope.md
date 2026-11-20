@@ -4,13 +4,13 @@ What the red-team agent (or human pentester) **may** and **may not** do.
 
 ## Test target
 
-- The OpenAlice dev instance running on the operator's local machine
+- The Lyramor dev instance running on the operator's local machine
 - Started via `pnpm dev` (Guardian + UTA + Alice + Vite)
 - Bound to localhost by default; operator may rebind to `0.0.0.0` if testing
   public-mode scenarios
 
 **Never** test against a non-dev instance unless the operator explicitly
-points the agent at one. "Production" doesn't really exist for OpenAlice
+points the agent at one. "Production" doesn't really exist for Lyramor
 (it's self-hosted) — but if the operator has a personal cloud instance,
 don't touch it without confirmation.
 
@@ -33,7 +33,7 @@ don't touch it without confirmation.
 
 ## Account types — what's safe to play with
 
-OpenAlice's `data/config/accounts.json` controls which brokers are loaded.
+Lyramor's `data/config/accounts.json` controls which brokers are loaded.
 The operator should keep at least one **MockBroker** UTA configured for
 testing. Hands-off real ones.
 

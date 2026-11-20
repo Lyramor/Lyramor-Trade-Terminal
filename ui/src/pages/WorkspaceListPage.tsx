@@ -136,7 +136,7 @@ export function WorkspaceListPage() {
         <h2 className="text-lg font-medium text-text mb-2">Workspaces</h2>
         <p className="text-sm max-w-md text-center">
           No workspaces yet. Create one from the sidebar — each is an isolated git
-          directory with a persistent terminal session attached, wired to OpenAlice
+          directory with a persistent terminal session attached, wired to Lyramor
           over MCP.
         </p>
       </div>

@@ -326,7 +326,7 @@ export const ja: Resources = {
     emptyBody: 'テンプレートが見つかりません。ランチャーのテンプレートディレクトリを確認してください。',
     communityTitle: 'コミュニティ',
     communityDescription:
-      'サードパーティのエコシステムをまとめたテンプレート — ワークスペース作成時に上流リポジトリから新規 clone され、OpenAlice ではなく各作者がメンテナンスしています。',
+      'サードパーティのエコシステムをまとめたテンプレート — ワークスペース作成時に上流リポジトリから新規 clone され、Lyramor ではなく各作者がメンテナンスしています。',
     communityBadge: 'コミュニティ',
     agentsLabel: 'Agents',
     agentNotInstalled: 'このマシンに未インストール',
@@ -347,7 +347,7 @@ export const ja: Resources = {
     create: 'ワークスペースを作成',
   },
   auth: {
-    heading: 'OpenAlice にサインイン',
+    heading: 'Lyramor にサインイン',
     instruction: '初回起動時に表示された管理者トークンを貼り付けてください。',
     adminTokenLabel: '管理者トークン',
     signingIn: 'サインイン中…',

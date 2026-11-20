@@ -17,7 +17,7 @@ const BOARDS = [
 export function createReferenceBoardTools(reference: ReferenceDataService) {
   return {
     marketGetBoard: tool({
-      description: `Read a finished market board — the same boards the OpenAlice UI renders.
+      description: `Read a finished market board — the same boards the Lyramor UI renders.
 
 Available boards:
 - movers: gainers/losers/most-active + value/growth/size screener lists (intraday)
